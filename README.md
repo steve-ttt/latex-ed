@@ -52,12 +52,13 @@ Example serving a specific paper directory:
 
 | Shortcut | Action |
 | :--- | :--- |
+| `Alt+I` / `Cmd+Shift+I` | Open Insert LaTeX Tag / Symbol palette |
 | `Ctrl+F` / `Cmd+F` | Open Find bar |
 | `Ctrl+H` / `Cmd+H` | Open Find & Replace bar |
 | `Ctrl+S` / `Cmd+S` | Save file & recompile |
 | `Ctrl+Enter` / `Cmd+Enter` | Recompile project |
 | `Ctrl+J` / `Cmd+J` | SyncTeX jump to corresponding PDF location |
-| `Escape` | Close Find / Replace dialog |
+| `Escape` | Close Insert palette / Find dialog |
 | `Tab` | Indent with 2 spaces |
 
 ---

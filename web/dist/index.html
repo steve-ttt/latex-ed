@@ -277,6 +277,135 @@
     .find-action-btn:hover { background: var(--bg-active); color: white; }
     .replace-row.hidden { display: none; }
 
+    /* Insert LaTeX Snippet Palette */
+    .insert-palette {
+      position: absolute;
+      top: 6px;
+      right: 18px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      z-index: 60;
+      width: 460px;
+      max-width: calc(100% - 36px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .insert-palette.hidden { display: none; }
+    .insert-search-bar {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-darker);
+    }
+    .insert-search-bar input {
+      flex: 1;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-bright);
+      font-size: 12px;
+      padding: 5px 8px;
+      outline: none;
+      font-family: inherit;
+    }
+    .insert-search-bar input:focus { border-color: var(--accent); }
+    .insert-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 6px 8px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .insert-tab {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .insert-tab:hover { background: var(--bg-hover); color: var(--text); }
+    .insert-tab.active { background: var(--accent); color: white; border-color: var(--accent); font-weight: 500; }
+    .insert-list {
+      max-height: 380px;
+      overflow-y: auto;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .insert-category-header {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      padding: 6px 8px 2px 8px;
+      text-transform: uppercase;
+    }
+    .insert-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.1s;
+    }
+    .insert-item:hover, .insert-item.selected {
+      background: var(--bg-hover);
+      color: var(--text-bright);
+    }
+    .insert-item.selected {
+      outline: 1px solid var(--accent);
+    }
+    .insert-badge {
+      width: 26px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--success);
+      flex-shrink: 0;
+      font-family: serif;
+    }
+    .insert-name {
+      flex: 1;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .insert-code {
+      font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255,255,255,0.05);
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .insert-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
     /* Logs & Diagnostics Panel */
     .log-panel {
       background: var(--bg-darker);
@@ -387,12 +516,32 @@
         <div class="editor-header">
           <span id="editorStatus">Ready</span>
           <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="btnInsert" style="padding: 2px 8px; font-size: 11px;" title="Insert LaTeX Tag or Symbol (Alt+I)">➕ Insert ▾</button>
             <button id="btnToggleWrap" style="padding: 2px 8px; font-size: 11px;" title="Toggle Word Wrap">↩ Wrap: On</button>
             <button id="btnFind" style="padding: 2px 8px; font-size: 11px;" title="Find (Ctrl+F) / Replace (Ctrl+H)">🔍 Find</button>
             <button id="btnSyncTex" style="padding: 2px 8px; font-size: 11px;" title="Jump to PDF location (Ctrl+J)">📍 Jump to PDF</button>
           </div>
         </div>
         <div class="editor-wrapper">
+          <!-- Insert LaTeX Snippet Floating Palette -->
+          <div id="insertPalette" class="insert-palette hidden">
+            <div class="insert-search-bar">
+              <span style="font-size: 12px; color: var(--text-muted);">🔍</span>
+              <input type="text" id="insertSearch" placeholder="Search tags, math, Greek, symbols... (Alt+I)" autocomplete="off" spellcheck="false" />
+              <button id="insertClose" class="find-btn" title="Close (Escape)">✕</button>
+            </div>
+            <div class="insert-tabs" id="insertTabs">
+              <button class="insert-tab active" data-cat="all">All</button>
+              <button class="insert-tab" data-cat="Math">Math</button>
+              <button class="insert-tab" data-cat="Greek">Greek</button>
+              <button class="insert-tab" data-cat="Relational">Relational</button>
+              <button class="insert-tab" data-cat="Environments">Environments</button>
+              <button class="insert-tab" data-cat="Text">Text</button>
+              <button class="insert-tab" data-cat="Matrices">Matrices</button>
+            </div>
+            <div class="insert-list" id="insertList"></div>
+          </div>
+
           <!-- Find & Replace Floating Widget -->
           <div id="findWidget" class="find-widget hidden">
             <div class="find-row">
@@ -480,6 +629,14 @@
     const editorStatus = document.getElementById('editorStatus');
     const headerFile = document.getElementById('headerFile');
 
+    // Insert Snippet Elements
+    const btnInsert = document.getElementById('btnInsert');
+    const insertPalette = document.getElementById('insertPalette');
+    const insertSearch = document.getElementById('insertSearch');
+    const insertClose = document.getElementById('insertClose');
+    const insertTabs = document.getElementById('insertTabs');
+    const insertList = document.getElementById('insertList');
+
     // Find & Replace Elements & State
     const btnFind = document.getElementById('btnFind');
     const findWidget = document.getElementById('findWidget');
@@ -500,6 +657,7 @@
     let matchCase = false;
 
     function openFind(withReplace = false) {
+      if (typeof closeInsertPalette === 'function') closeInsertPalette();
       findWidget.classList.remove('hidden');
       if (withReplace) {
         replaceRow.classList.remove('hidden');
@@ -645,6 +803,237 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+    }
+
+    // Comprehensive LaTeX Snippet Palette
+    const SNIPPETS = [
+      // Environments & Lists
+      { cat: 'Environments', label: 'itemize (bulleted list)', badge: '•', code: '\\begin{itemize}', body: '\\begin{itemize}\n  \\item $0\n\\end{itemize}' },
+      { cat: 'Environments', label: 'enumerate (numbered list)', badge: '1.', code: '\\begin{enumerate}', body: '\\begin{enumerate}\n  \\item $0\n\\end{enumerate}' },
+      { cat: 'Environments', label: 'item (list item)', badge: '•', code: '\\item', body: '\\item $0' },
+      { cat: 'Environments', label: 'description (term & definition)', badge: '≡', code: '\\begin{description}', body: '\\begin{description}\n  \\item[$0] \n\\end{description}' },
+      { cat: 'Environments', label: 'equation (numbered equation)', badge: 'fx', code: '\\begin{equation}', body: '\\begin{equation}\n  $0\n\\end{equation}' },
+      { cat: 'Environments', label: 'align* (aligned equations)', badge: '&=', code: '\\begin{align*}', body: '\\begin{align*}\n  $0 &= \n\\end{align*}' },
+      { cat: 'Environments', label: 'figure (image & caption)', badge: '🖼️', code: '\\begin{figure}', body: '\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics[width=0.8\\textwidth]{$0}\n  \\caption{Caption}\n  \\label{fig:label}\n\\end{figure}' },
+      { cat: 'Environments', label: 'table (tabular grid)', badge: '▦', code: '\\begin{table}', body: '\\begin{table}[htbp]\n  \\centering\n  \\begin{tabular}{|c|c|}\n    \\hline\n    $0 &  \\\\\n    \\hline\n  \\end{tabular}\n  \\caption{Caption}\n  \\label{tab:label}\n\\end{table}' },
+      { cat: 'Environments', label: 'section (heading 1)', badge: 'H1', code: '\\section{}', wrapPrefix: '\\section{', wrapSuffix: '}' },
+      { cat: 'Environments', label: 'subsection (heading 2)', badge: 'H2', code: '\\subsection{}', wrapPrefix: '\\subsection{', wrapSuffix: '}' },
+      { cat: 'Environments', label: 'subsubsection (heading 3)', badge: 'H3', code: '\\subsubsection{}', wrapPrefix: '\\subsubsection{', wrapSuffix: '}' },
+
+      // Text Formatting
+      { cat: 'Text', label: 'bold (textbf)', badge: 'B', code: '\\textbf{}', wrapPrefix: '\\textbf{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'italic (textit)', badge: 'I', code: '\\textit{}', wrapPrefix: '\\textit{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'typewriter / code (texttt)', badge: 'TT', code: '\\texttt{}', wrapPrefix: '\\texttt{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'underline (underline)', badge: 'U', code: '\\underline{}', wrapPrefix: '\\underline{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'emphasize (emph)', badge: 'Em', code: '\\emph{}', wrapPrefix: '\\emph{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'quote (block quotation)', badge: '“ ”', code: '\\begin{quote}', body: '\\begin{quote}\n  $0\n\\end{quote}' },
+      { cat: 'Text', label: 'footnote (footnote text)', badge: '¹', code: '\\footnote{}', wrapPrefix: '\\footnote{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'cite (citation reference)', badge: '📖', code: '\\cite{}', wrapPrefix: '\\cite{', wrapSuffix: '}' },
+      { cat: 'Text', label: 'ref (cross reference)', badge: '🔗', code: '\\ref{}', wrapPrefix: '\\ref{', wrapSuffix: '}' },
+
+      // Math & Calculus
+      { cat: 'Math', label: 'frac (fraction)', badge: 'a/b', code: '\\frac{num}{den}', wrapPrefix: '\\frac{', wrapSuffix: '}{}' },
+      { cat: 'Math', label: 'sqrt (square root)', badge: '√', code: '\\sqrt{}', wrapPrefix: '\\sqrt{', wrapSuffix: '}' },
+      { cat: 'Math', label: 'sum (summation with bounds)', badge: '∑', code: '\\sum_{i=1}^{n}', body: '\\sum_{i=1}^{n} $0' },
+      { cat: 'Math', label: 'int (definite integral)', badge: '∫', code: '\\int_{a}^{b} ... dx', body: '\\int_{a}^{b} $0 \\, dx' },
+      { cat: 'Math', label: 'int (indefinite integral)', badge: '∫', code: '\\int ... dx', body: '\\int $0 \\, dx' },
+      { cat: 'Math', label: 'prod (product with bounds)', badge: '∏', code: '\\prod_{i=1}^{n}', body: '\\prod_{i=1}^{n} $0' },
+      { cat: 'Math', label: 'lim (limit)', badge: 'lim', code: '\\lim_{x \\to \\infty}', body: '\\lim_{x \\to \\infty} $0' },
+      { cat: 'Math', label: 'partial (derivative)', badge: '∂', code: '\\frac{\\partial f}{\\partial x}', body: '\\frac{\\partial $0}{\\partial x}' },
+      { cat: 'Math', label: 'superscript (power)', badge: 'x²', code: '^{}', wrapPrefix: '^{', wrapSuffix: '}' },
+      { cat: 'Math', label: 'subscript (index)', badge: 'x₁', code: '_{}', wrapPrefix: '_{', wrapSuffix: '}' },
+      { cat: 'Math', label: 'infty (infinity)', badge: '∞', code: '\\infty', body: '\\infty' },
+      { cat: 'Math', label: 'pm (plus-minus)', badge: '±', code: '\\pm', body: '\\pm' },
+      { cat: 'Math', label: 'cdot (centered dot)', badge: '·', code: '\\cdot', body: '\\cdot' },
+      { cat: 'Math', label: 'times (multiplication cross)', badge: '×', code: '\\times', body: '\\times' },
+
+      // Greek Letters
+      { cat: 'Greek', label: 'alpha', badge: 'α', code: '\\alpha', body: '\\alpha' },
+      { cat: 'Greek', label: 'beta', badge: 'β', code: '\\beta', body: '\\beta' },
+      { cat: 'Greek', label: 'gamma', badge: 'γ', code: '\\gamma', body: '\\gamma' },
+      { cat: 'Greek', label: 'Gamma (capital)', badge: 'Γ', code: '\\Gamma', body: '\\Gamma' },
+      { cat: 'Greek', label: 'delta', badge: 'δ', code: '\\delta', body: '\\delta' },
+      { cat: 'Greek', label: 'Delta (capital)', badge: 'Δ', code: '\\Delta', body: '\\Delta' },
+      { cat: 'Greek', label: 'epsilon', badge: 'ϵ', code: '\\epsilon', body: '\\epsilon' },
+      { cat: 'Greek', label: 'zeta', badge: 'ζ', code: '\\zeta', body: '\\zeta' },
+      { cat: 'Greek', label: 'eta', badge: 'η', code: '\\eta', body: '\\eta' },
+      { cat: 'Greek', label: 'theta', badge: 'θ', code: '\\theta', body: '\\theta' },
+      { cat: 'Greek', label: 'Theta (capital)', badge: 'Θ', code: '\\Theta', body: '\\Theta' },
+      { cat: 'Greek', label: 'lambda', badge: 'λ', code: '\\lambda', body: '\\lambda' },
+      { cat: 'Greek', label: 'Lambda (capital)', badge: 'Λ', code: '\\Lambda', body: '\\Lambda' },
+      { cat: 'Greek', label: 'mu', badge: 'μ', code: '\\mu', body: '\\mu' },
+      { cat: 'Greek', label: 'pi', badge: 'π', code: '\\pi', body: '\\pi' },
+      { cat: 'Greek', label: 'Pi (capital)', badge: 'Π', code: '\\Pi', body: '\\Pi' },
+      { cat: 'Greek', label: 'rho', badge: 'ρ', code: '\\rho', body: '\\rho' },
+      { cat: 'Greek', label: 'sigma', badge: 'σ', code: '\\sigma', body: '\\sigma' },
+      { cat: 'Greek', label: 'Sigma (capital)', badge: 'Σ', code: '\\Sigma', body: '\\Sigma' },
+      { cat: 'Greek', label: 'tau', badge: 'τ', code: '\\tau', body: '\\tau' },
+      { cat: 'Greek', label: 'phi', badge: 'ϕ', code: '\\phi', body: '\\phi' },
+      { cat: 'Greek', label: 'Phi (capital)', badge: 'Φ', code: '\\Phi', body: '\\Phi' },
+      { cat: 'Greek', label: 'psi', badge: 'ψ', code: '\\psi', body: '\\psi' },
+      { cat: 'Greek', label: 'Psi (capital)', badge: 'Ψ', code: '\\Psi', body: '\\Psi' },
+      { cat: 'Greek', label: 'omega', badge: 'ω', code: '\\omega', body: '\\omega' },
+      { cat: 'Greek', label: 'Omega (capital)', badge: 'Ω', code: '\\Omega', body: '\\Omega' },
+
+      // Relational & Logic
+      { cat: 'Relational', label: 'leq (less or equal)', badge: '≤', code: '\\leq', body: '\\leq' },
+      { cat: 'Relational', label: 'geq (greater or equal)', badge: '≥', code: '\\geq', body: '\\geq' },
+      { cat: 'Relational', label: 'neq (not equal)', badge: '≠', code: '\\neq', body: '\\neq' },
+      { cat: 'Relational', label: 'approx (approximately equal)', badge: '≈', code: '\\approx', body: '\\approx' },
+      { cat: 'Relational', label: 'equiv (equivalent / identical)', badge: '≡', code: '\\equiv', body: '\\equiv' },
+      { cat: 'Relational', label: 'sim (similar / proportional)', badge: '∼', code: '\\sim', body: '\\sim' },
+      { cat: 'Relational', label: 'subset (proper subset)', badge: '⊂', code: '\\subset', body: '\\subset' },
+      { cat: 'Relational', label: 'subseteq (subset or equal)', badge: '⊆', code: '\\subseteq', body: '\\subseteq' },
+      { cat: 'Relational', label: 'supset (superset)', badge: '⊃', code: '\\supset', body: '\\supset' },
+      { cat: 'Relational', label: 'in (element of)', badge: '∈', code: '\\in', body: '\\in' },
+      { cat: 'Relational', label: 'notin (not element of)', badge: '∉', code: '\\notin', body: '\\notin' },
+      { cat: 'Relational', label: 'forall (for all quantifier)', badge: '∀', code: '\\forall', body: '\\forall' },
+      { cat: 'Relational', label: 'exists (there exists)', badge: '∃', code: '\\exists', body: '\\exists' },
+      { cat: 'Relational', label: 'implies (long right arrow)', badge: '⟹', code: '\\implies', body: '\\implies' },
+      { cat: 'Relational', label: 'iff (if and only if)', badge: '⟺', code: '\\iff', body: '\\iff' },
+      { cat: 'Relational', label: 'to (right arrow)', badge: '→', code: '\\to', body: '\\to' },
+      { cat: 'Relational', label: 'gets (left arrow)', badge: '←', code: '\\gets', body: '\\gets' },
+      { cat: 'Relational', label: 'mapsto (maps to)', badge: '↦', code: '\\mapsto', body: '\\mapsto' },
+
+      // Matrices & Arrays
+      { cat: 'Matrices', label: 'pmatrix (parentheses matrix)', badge: '( )', code: '\\begin{pmatrix}', body: '\\begin{pmatrix}\n  $0 &  \\\\\n   & \n\\end{pmatrix}' },
+      { cat: 'Matrices', label: 'bmatrix (bracket matrix)', badge: '[ ]', code: '\\begin{bmatrix}', body: '\\begin{bmatrix}\n  $0 &  \\\\\n   & \n\\end{bmatrix}' },
+      { cat: 'Matrices', label: 'matrix (plain matrix)', badge: '▦', code: '\\begin{matrix}', body: '\\begin{matrix}\n  $0 &  \\\\\n   & \n\\end{matrix}' },
+      { cat: 'Matrices', label: 'vmatrix (determinant / bars)', badge: '| |', code: '\\begin{vmatrix}', body: '\\begin{vmatrix}\n  $0 &  \\\\\n   & \n\\end{vmatrix}' },
+      { cat: 'Matrices', label: 'cases (piecewise cases)', badge: '{ ', code: '\\begin{cases}', body: '\\begin{cases}\n  $0, & \\text{if }  \\\\\n  , & \\text{otherwise}\n\\end{cases}' }
+    ];
+
+    let currentCategory = 'all';
+    let filteredSnippets = [];
+    let selectedSnippetIndex = 0;
+
+    function renderInsertList() {
+      const q = insertSearch.value.trim().toLowerCase();
+      filteredSnippets = SNIPPETS.filter(s => {
+        const matchesCat = (currentCategory === 'all' || s.cat === currentCategory);
+        if (!matchesCat) return false;
+        if (!q) return true;
+        return s.label.toLowerCase().includes(q) ||
+               s.code.toLowerCase().includes(q) ||
+               s.cat.toLowerCase().includes(q) ||
+               (s.badge && s.badge.toLowerCase().includes(q));
+      });
+
+      if (filteredSnippets.length === 0) {
+        insertList.innerHTML = '<div class="insert-empty">No matching LaTeX tags found</div>';
+        selectedSnippetIndex = -1;
+        return;
+      }
+
+      if (selectedSnippetIndex >= filteredSnippets.length || selectedSnippetIndex < 0) {
+        selectedSnippetIndex = 0;
+      }
+
+      let html = '';
+      let lastCat = '';
+      filteredSnippets.forEach((item, idx) => {
+        if (currentCategory === 'all' && item.cat !== lastCat) {
+          lastCat = item.cat;
+          html += `<div class="insert-category-header">${escapeHtml(lastCat)}</div>`;
+        }
+        const isSelected = (idx === selectedSnippetIndex);
+        html += `
+          <div class="insert-item ${isSelected ? 'selected' : ''}" data-idx="${idx}">
+            <span class="insert-badge">${escapeHtml(item.badge || '')}</span>
+            <span class="insert-name">${escapeHtml(item.label)}</span>
+            <code class="insert-code">${escapeHtml(item.code)}</code>
+          </div>
+        `;
+      });
+
+      insertList.innerHTML = html;
+
+      // Add click handlers
+      const items = insertList.querySelectorAll('.insert-item');
+      items.forEach(el => {
+        el.onclick = () => {
+          const idx = parseInt(el.getAttribute('data-idx'), 10);
+          if (filteredSnippets[idx]) {
+            insertSnippet(filteredSnippets[idx]);
+          }
+        };
+      });
+
+      // Scroll selected item into view
+      const selectedEl = insertList.querySelector('.insert-item.selected');
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function insertSnippet(item) {
+      const start = codeEditor.selectionStart;
+      const end = codeEditor.selectionEnd;
+      const val = codeEditor.value;
+      const selection = val.substring(start, end);
+
+      let insertedText = '';
+      let targetCaret = start;
+
+      if (item.wrapPrefix && item.wrapSuffix) {
+        if (selection) {
+          insertedText = item.wrapPrefix + selection + item.wrapSuffix;
+          targetCaret = start + insertedText.length;
+        } else {
+          insertedText = item.wrapPrefix + item.wrapSuffix;
+          targetCaret = start + item.wrapPrefix.length;
+        }
+      } else if (item.body) {
+        const placeholderIdx = item.body.indexOf('$0');
+        if (placeholderIdx !== -1) {
+          const before = item.body.substring(0, placeholderIdx);
+          const after = item.body.substring(placeholderIdx + 2);
+          insertedText = before + selection + after;
+          targetCaret = start + before.length + (selection ? selection.length : 0);
+        } else {
+          insertedText = item.body + ' ';
+          targetCaret = start + insertedText.length;
+        }
+      } else if (item.code) {
+        insertedText = item.code + ' ';
+        targetCaret = start + insertedText.length;
+      }
+
+      codeEditor.value = val.substring(0, start) + insertedText + val.substring(end);
+      codeEditor.focus();
+      codeEditor.setSelectionRange(targetCaret, targetCaret);
+
+      updateLineNumbers();
+      editorStatus.textContent = 'Unsaved changes';
+      closeInsertPalette();
+    }
+
+    function openInsertPalette() {
+      findWidget.classList.add('hidden');
+      insertPalette.classList.remove('hidden');
+      btnInsert.classList.add('primary');
+      insertSearch.value = '';
+      currentCategory = 'all';
+      insertTabs.querySelectorAll('.insert-tab').forEach((t, i) => {
+        t.classList.toggle('active', i === 0);
+      });
+      selectedSnippetIndex = 0;
+      renderInsertList();
+      setTimeout(() => insertSearch.focus(), 20);
+    }
+
+    function closeInsertPalette() {
+      insertPalette.classList.add('hidden');
+      btnInsert.classList.remove('primary');
+      codeEditor.focus();
+    }
+
+    function toggleInsertPalette() {
+      if (insertPalette.classList.contains('hidden')) {
+        openInsertPalette();
+      } else {
+        closeInsertPalette();
+      }
     }
 
     const measureDiv = document.createElement('div');
@@ -1092,6 +1481,58 @@ Welcome to your local \\LaTeX{} web editor!
 
     document.getElementById('btnSyncTex').onclick = syncTexForward;
 
+    // Insert Palette Event Listeners
+    btnInsert.onclick = toggleInsertPalette;
+    insertClose.onclick = closeInsertPalette;
+
+    insertTabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.insert-tab');
+      if (!btn) return;
+      insertTabs.querySelectorAll('.insert-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = btn.getAttribute('data-cat');
+      selectedSnippetIndex = 0;
+      renderInsertList();
+      insertSearch.focus();
+    });
+
+    insertSearch.addEventListener('input', () => {
+      selectedSnippetIndex = 0;
+      renderInsertList();
+    });
+
+    insertSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filteredSnippets.length > 0) {
+          selectedSnippetIndex = (selectedSnippetIndex + 1) % filteredSnippets.length;
+          renderInsertList();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredSnippets.length > 0) {
+          selectedSnippetIndex = (selectedSnippetIndex - 1 + filteredSnippets.length) % filteredSnippets.length;
+          renderInsertList();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredSnippets.length > 0 && selectedSnippetIndex >= 0 && filteredSnippets[selectedSnippetIndex]) {
+          insertSnippet(filteredSnippets[selectedSnippetIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeInsertPalette();
+      }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (!insertPalette.classList.contains('hidden') &&
+          !insertPalette.contains(e.target) &&
+          !btnInsert.contains(e.target)) {
+        closeInsertPalette();
+      }
+    });
+
     // Find & Replace Event Listeners
     btnFind.onclick = () => openFind(false);
     findClose.onclick = closeFind;
@@ -1140,15 +1581,24 @@ Welcome to your local \\LaTeX{} web editor!
       }
     });
 
-    // Hotkeys: Ctrl+F, Ctrl+H, Ctrl+S, Ctrl+Enter, Ctrl+J, Escape
+    // Hotkeys: Alt+I, Ctrl+F, Ctrl+H, Ctrl+S, Ctrl+Enter, Ctrl+J, Escape
     window.addEventListener('keydown', (e) => {
       const isCmdOrCtrl = (e.ctrlKey || e.metaKey);
-      if (isCmdOrCtrl && e.key.toLowerCase() === 'f') {
+      if (e.altKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        toggleInsertPalette();
+      } else if (isCmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        toggleInsertPalette();
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         openFind(false);
       } else if (isCmdOrCtrl && e.key.toLowerCase() === 'h') {
         e.preventDefault();
         openFind(true);
+      } else if (e.key === 'Escape' && !insertPalette.classList.contains('hidden')) {
+        e.preventDefault();
+        closeInsertPalette();
       } else if (e.key === 'Escape' && !findWidget.classList.contains('hidden')) {
         e.preventDefault();
         closeFind();
