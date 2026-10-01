@@ -1,0 +1,151 @@
+package workspace
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestWorkspace_SafePath_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	validPaths := []string{
+		"main.tex",
+		"chapters/ch1.tex",
+		"./figures/image.png",
+	}
+
+	for _, p := range validPaths {
+		resolved, err := ws.SafePath(p)
+		if err != nil {
+			t.Errorf("expected %q to be valid, got error: %v", p, err)
+		}
+		rel, err := filepath.Rel(tmpDir, resolved)
+		if err != nil || rel == ".." || filepath.IsAbs(rel) {
+			t.Errorf("resolved path %q escaped tmpDir %q", resolved, tmpDir)
+		}
+	}
+}
+
+func TestWorkspace_SafePath_TraversalAttack(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	traversalPaths := []string{
+		"../outside.txt",
+		"../../etc/passwd",
+		"/etc/passwd",
+		"foo/../../outside.txt",
+		"./../../secret",
+	}
+
+	for _, p := range traversalPaths {
+		_, err := ws.SafePath(p)
+		if err == nil {
+			t.Errorf("expected traversal path %q to fail, but succeeded", p)
+		}
+	}
+}
+
+func TestWorkspace_ReadWriteFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	content := []byte("\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}\n")
+	err = ws.WriteFile("chapters/intro.tex", content)
+	if err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	readBack, err := ws.ReadFile("chapters/intro.tex")
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+
+	if string(readBack) != string(content) {
+		t.Errorf("content mismatch: got %q, want %q", string(readBack), string(content))
+	}
+}
+
+func TestWorkspace_ListFiles_ExcludesCacheAndHidden(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Create test files
+	_ = os.WriteFile(filepath.Join(tmpDir, "main.tex"), []byte("test"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "chapters"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "chapters", "ch1.tex"), []byte("ch1"), 0644)
+
+	// Create files that should be ignored
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".latex-cache"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".latex-cache", "main.aux"), []byte("aux"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".git"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".git", "config"), []byte("git"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".venv"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, ".venv", "pip.py"), []byte("pip"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "__pycache__"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "__pycache__", "foo.cpython-311.pyc"), []byte("c"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "main.tex~"), []byte("backup"), 0644)
+
+	files, err := ws.ListFiles()
+	if err != nil {
+		t.Fatalf("failed to list files: %v", err)
+	}
+
+	paths := make(map[string]bool)
+	for _, f := range files {
+		paths[f.Path] = true
+	}
+
+	if !paths["main.tex"] {
+		t.Errorf("expected main.tex to be listed")
+	}
+	if !paths["chapters/ch1.tex"] {
+		t.Errorf("expected chapters/ch1.tex to be listed")
+	}
+	if paths[".latex-cache/main.aux"] || paths[".latex-cache"] {
+		t.Errorf("expected .latex-cache to be excluded from file list")
+	}
+	if paths[".git/config"] || paths[".git"] {
+		t.Errorf("expected .git to be excluded from file list")
+	}
+	if paths[".venv/pip.py"] || paths[".venv"] {
+		t.Errorf("expected .venv to be excluded from file list")
+	}
+	if paths["__pycache__/foo.cpython-311.pyc"] || paths["main.tex~"] {
+		t.Errorf("expected __pycache__ and backup files to be excluded")
+	}
+}
+
+func TestWorkspace_DeleteFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	if err := ws.WriteFile("temp.tex", []byte("remove me")); err != nil {
+		t.Fatalf("failed to write temp.tex: %v", err)
+	}
+
+	if err := ws.DeleteFile("temp.tex"); err != nil {
+		t.Fatalf("failed to delete temp.tex: %v", err)
+	}
+
+	if _, err := ws.ReadFile("temp.tex"); err == nil {
+		t.Errorf("expected error reading deleted file, got nil")
+	}
+}

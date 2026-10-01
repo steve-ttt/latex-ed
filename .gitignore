@@ -1,0 +1,157 @@
+# ==============================================================================
+# LaTeX-Ed - Git Ignore Configuration
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. LaTeX Build Artifacts & Caches
+# ------------------------------------------------------------------------------
+.latex-cache/
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.synctex
+*.toc
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.nav
+*.snm
+*.vrb
+*.lof
+*.lot
+*.idx
+*.ilg
+*.ind
+*.bcf
+*.run.xml
+*.glo
+*.gls
+*.ist
+*.upa
+*.upb
+
+# ------------------------------------------------------------------------------
+# 2. Binaries, Compiled Outputs & Test Artifacts
+# ------------------------------------------------------------------------------
+bin/
+/latex-editor
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+
+# ------------------------------------------------------------------------------
+# 3. User Private Documents & Papers (Prevents Leaking Personal Files)
+# ------------------------------------------------------------------------------
+# All PDFs (compiled documents and personal scans)
+*.pdf
+
+# Personal LaTeX documents placed in the repo (all code is Go/TS/HTML)
+*.tex
+*.bib
+*.cls
+*.sty
+*.dtx
+*.ins
+*.bst
+
+# Common document and data files
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.odt
+*.ods
+*.odp
+*.rtf
+*.csv
+
+# Personal document directories
+documents/
+papers/
+notes/
+private/
+data/
+samples/
+my_*/
+
+# ------------------------------------------------------------------------------
+# 4. Sensitive Information, Credentials & Environment Configs
+# ------------------------------------------------------------------------------
+.env
+.env.*
+*.env
+*.local
+*.secret
+*.key
+*.pem
+*.token
+id_rsa*
+credentials*
+config.local.*
+
+# ------------------------------------------------------------------------------
+# 5. OS & Editor Artifacts
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+*~
+*.swp
+*.swo
+*.bak
+*.orig
+*.rej
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.history/
+.cache/
+
+# ------------------------------------------------------------------------------
+# 6. Python & Virtual Environments (User Workspace Isolation)
+# ------------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.ipynb_checkpoints/
+
+# ------------------------------------------------------------------------------
+# 7. Node / Frontend Dependencies & Temporary Files
+# ------------------------------------------------------------------------------
+node_modules/
+web/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vite/
+web/.vite/
+
+# ------------------------------------------------------------------------------
+# 8. Temporary & Scratch Folders
+# ------------------------------------------------------------------------------
+tmp/
+temp/
+scratch/
+
+# ------------------------------------------------------------------------------
+# Explicitly Tracked Embedded Assets
+# ------------------------------------------------------------------------------
+# web/dist is embedded into the Go binary at compile-time (via go:embed)
+!web/dist/
+!web/dist/**

@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LaTeX-Ed</title>
+  <style>
+    :root {
+      --bg-darker: #181818;
+      --bg-dark: #1e1e1e;
+      --bg-panel: #252526;
+      --bg-hover: #2a2d2e;
+      --bg-active: #37373d;
+      --border: #333333;
+      --text: #cccccc;
+      --text-muted: #858585;
+      --text-bright: #ffffff;
+      --accent: #0e639c;
+      --accent-hover: #1177bb;
+      --success: #4ec9b0;
+      --error: #f14c4c;
+      --warning: #cca700;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-dark); color: var(--text); overflow: hidden; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+
+    header {
+      height: 44px;
+      background: var(--bg-darker);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; color: var(--success); }
+    .brand span { font-weight: 400; font-size: 12px; color: var(--text-muted); }
+
+    .actions { display: flex; align-items: center; gap: 10px; }
+
+    button {
+      background: var(--bg-hover);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button:hover { background: var(--bg-active); border-color: #444; }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); font-weight: 600; }
+    button.primary:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .main-container { flex: 1; display: flex; overflow: hidden; }
+
+    /* Sidebar & Directory Tree */
+    aside {
+      width: 240px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .aside-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .file-tree-container {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 6px 0;
+      user-select: none;
+    }
+
+    .tree-row {
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+      margin: 1px 4px;
+      color: var(--text);
+      transition: background 0.1s;
+    }
+    .tree-row:hover { background: var(--bg-hover); color: var(--text-bright); }
+    .tree-row.active { background: var(--bg-active); color: var(--text-bright); font-weight: 500; }
+
+    .tree-arrow {
+      width: 14px;
+      display: inline-block;
+      text-align: center;
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-right: 2px;
+      transition: transform 0.15s ease;
+    }
+    .tree-arrow.collapsed { transform: rotate(-90deg); }
+    .tree-arrow.empty { visibility: hidden; }
+
+    .tree-icon { margin-right: 6px; font-size: 13px; display: inline-flex; align-items: center; }
+    .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-delete { opacity: 0; font-size: 10px; color: var(--error); padding: 2px 4px; }
+    .tree-row:hover .tree-delete { opacity: 0.6; }
+    .tree-delete:hover { opacity: 1 !important; }
+
+    .tree-children { margin-left: 14px; }
+    .tree-children.hidden { display: none; }
+
+    /* Editor Section */
+    .editor-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      min-width: 320px;
+    }
+    .editor-header {
+      height: 32px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .editor-wrapper {
+      flex: 1;
+      display: flex;
+      position: relative;
+      background: var(--bg-dark);
+      overflow: hidden;
+    }
+    .line-numbers {
+      width: 48px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 20px;
+      padding: 8px 6px;
+      text-align: right;
+      user-select: none;
+      overflow: hidden;
+    }
+    .line-numbers .err-line {
+      color: var(--error);
+      font-weight: bold;
+      position: relative;
+    }
+    .line-numbers .err-line::before {
+      content: '●';
+      position: absolute;
+      left: 2px;
+      font-size: 9px;
+    }
+    .code-editor {
+      flex: 1;
+      background: transparent;
+      color: #e0e0e0;
+      border: none;
+      outline: none;
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 20px;
+      padding: 8px 12px;
+      resize: none;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      overflow-y: auto;
+      overflow-x: hidden;
+      tab-size: 2;
+    }
+
+    /* Find & Replace Floating Widget */
+    .find-widget {
+      position: absolute;
+      top: 6px;
+      right: 18px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      z-index: 50;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 340px;
+    }
+    .find-widget.hidden { display: none; }
+    .find-row, .replace-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .find-input-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .find-input-wrap input {
+      width: 100%;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text-bright);
+      font-size: 12px;
+      padding: 3px 62px 3px 6px;
+      outline: none;
+      font-family: inherit;
+    }
+    .find-input-wrap input:focus { border-color: var(--accent); }
+    .find-matches {
+      position: absolute;
+      right: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .find-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 3px 5px;
+      font-size: 11px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .find-btn:hover { background: var(--bg-hover); color: var(--text-bright); }
+    .find-toggle-opt {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 2px 4px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .find-toggle-opt:hover { background: var(--bg-hover); }
+    .find-toggle-opt.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .find-action-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .find-action-btn:hover { background: var(--bg-active); color: white; }
+    .replace-row.hidden { display: none; }
+
+    /* Logs & Diagnostics Panel */
+    .log-panel {
+      background: var(--bg-darker);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 180px;
+      transition: height 0.2s;
+    }
+    .log-panel.collapsed { height: 28px; }
+    .log-bar {
+      height: 28px;
+      background: var(--bg-panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .log-bar .stats { display: flex; gap: 12px; }
+    .stat-err { color: var(--error); }
+    .stat-warn { color: var(--warning); }
+    .stat-ok { color: var(--success); }
+
+    .log-body { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 12px; }
+    .diag-item {
+      padding: 4px 8px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+      font-family: monospace;
+      cursor: pointer;
+    }
+    .diag-item:hover { filter: brightness(1.2); }
+    .diag-item.error { background: rgba(241, 76, 76, 0.15); border-left: 3px solid var(--error); color: #fca5a5; }
+    .diag-item.warning { background: rgba(204, 167, 0, 0.15); border-left: 3px solid var(--warning); color: #fde047; }
+    .diag-context { color: #888888; font-size: 11px; margin-top: 2px; }
+
+    /* Viewer Section */
+    .viewer-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #525659;
+      min-width: 320px;
+    }
+    .viewer-header {
+      height: 32px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .pdf-frame {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #525659;
+    }
+    .pdf-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      gap: 12px;
+      background: var(--bg-dark);
+    }
+
+    .spin { display: inline-block; animation: spin 1s infinite linear; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand">
+        LaTeX-Ed
+        <span id="headerFile">• Document</span>
+      </div>
+      <div class="actions">
+        <button id="btnSave" title="Save file (Ctrl+S)">💾 Save</button>
+        <button id="btnCompile" class="primary" title="Recompile Project (Ctrl+Enter)">
+          <span id="compileIcon">▶</span> Recompile
+        </button>
+      </div>
+    </header>
+
+    <div class="main-container">
+      <!-- File Tree Sidebar -->
+      <aside>
+        <div class="aside-header">
+          <span>PROJECT FILES</span>
+          <button id="btnNewFile" style="padding: 2px 6px;" title="New File">+</button>
+        </div>
+        <div class="file-tree-container" id="fileTree"></div>
+      </aside>
+
+      <!-- Center Code Editor -->
+      <section class="editor-section">
+        <div class="editor-header">
+          <span id="editorStatus">Ready</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button id="btnToggleWrap" style="padding: 2px 8px; font-size: 11px;" title="Toggle Word Wrap">↩ Wrap: On</button>
+            <button id="btnFind" style="padding: 2px 8px; font-size: 11px;" title="Find (Ctrl+F) / Replace (Ctrl+H)">🔍 Find</button>
+            <button id="btnSyncTex" style="padding: 2px 8px; font-size: 11px;" title="Jump to PDF location (Ctrl+J)">📍 Jump to PDF</button>
+          </div>
+        </div>
+        <div class="editor-wrapper">
+          <!-- Find & Replace Floating Widget -->
+          <div id="findWidget" class="find-widget hidden">
+            <div class="find-row">
+              <button id="findToggleReplace" class="find-btn" title="Toggle Replace (Ctrl+H)">▶</button>
+              <div class="find-input-wrap">
+                <input type="text" id="findInput" placeholder="Find" spellcheck="false" />
+                <span id="findMatchesCount" class="find-matches">No results</span>
+              </div>
+              <button id="findCaseSensitive" class="find-toggle-opt" title="Match Case (Alt+C)">Aa</button>
+              <button id="findPrev" class="find-btn" title="Previous match (Shift+Enter)">▲</button>
+              <button id="findNext" class="find-btn" title="Next match (Enter)">▼</button>
+              <button id="findClose" class="find-btn" title="Close (Escape)">✕</button>
+            </div>
+            <div id="replaceRow" class="replace-row hidden">
+              <span style="width: 14px;"></span>
+              <div class="find-input-wrap">
+                <input type="text" id="replaceInput" placeholder="Replace" spellcheck="false" />
+              </div>
+              <button id="btnReplaceOne" class="find-action-btn" title="Replace current match">Replace</button>
+              <button id="btnReplaceAll" class="find-action-btn" title="Replace all occurrences">All</button>
+            </div>
+          </div>
+
+          <div class="line-numbers" id="lineNumbers">1</div>
+          <textarea class="code-editor" id="codeEditor" spellcheck="false"></textarea>
+        </div>
+
+        <!-- Collapsible Log Panel -->
+        <div class="log-panel" id="logPanel">
+          <div class="log-bar" id="logBar">
+            <div class="stats">
+              <span id="statErrors" class="stat-err">0 Errors</span>
+              <span id="statWarnings" class="stat-warn">0 Warnings</span>
+              <span id="statDuration" style="color: var(--text-muted);"></span>
+            </div>
+            <div id="logToggle">▼</div>
+          </div>
+          <div class="log-body" id="logBody">
+            <div style="color: var(--text-muted); font-style: italic;">No compilation errors yet.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right PDF Viewer -->
+      <section class="viewer-section">
+        <div class="viewer-header">
+          <span>PDF Preview</span>
+          <div>
+            <button id="btnDownload" style="padding: 2px 8px;" title="Download PDF">⬇ Download</button>
+            <button id="btnOpenNew" style="padding: 2px 8px;" title="Open in new window">⤢ Popout</button>
+          </div>
+        </div>
+        <div id="viewerContainer" style="flex:1; display:flex;">
+          <div class="pdf-empty" id="pdfEmpty">
+            <p>No compiled PDF yet.</p>
+            <button class="primary" id="btnInitialCompile">Compile Now</button>
+          </div>
+          <iframe class="pdf-frame" id="pdfFrame" style="display:none;"></iframe>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    let currentFile = '';
+    let files = [];
+    let isCompiling = false;
+    let diagnostics = [];
+    let folderState = {}; // path -> boolean (expanded)
+
+    const codeEditor = document.getElementById('codeEditor');
+    const lineNumbers = document.getElementById('lineNumbers');
+    const fileTree = document.getElementById('fileTree');
+    const pdfFrame = document.getElementById('pdfFrame');
+    const pdfEmpty = document.getElementById('pdfEmpty');
+    const btnCompile = document.getElementById('btnCompile');
+    const btnSave = document.getElementById('btnSave');
+    const logPanel = document.getElementById('logPanel');
+    const logBar = document.getElementById('logBar');
+    const logBody = document.getElementById('logBody');
+    const logToggle = document.getElementById('logToggle');
+    const statErrors = document.getElementById('statErrors');
+    const statWarnings = document.getElementById('statWarnings');
+    const statDuration = document.getElementById('statDuration');
+    const editorStatus = document.getElementById('editorStatus');
+    const headerFile = document.getElementById('headerFile');
+
+    // Find & Replace Elements & State
+    const btnFind = document.getElementById('btnFind');
+    const findWidget = document.getElementById('findWidget');
+    const findInput = document.getElementById('findInput');
+    const replaceInput = document.getElementById('replaceInput');
+    const replaceRow = document.getElementById('replaceRow');
+    const findToggleReplace = document.getElementById('findToggleReplace');
+    const findCaseSensitive = document.getElementById('findCaseSensitive');
+    const findPrev = document.getElementById('findPrev');
+    const findNext = document.getElementById('findNext');
+    const findClose = document.getElementById('findClose');
+    const findMatchesCount = document.getElementById('findMatchesCount');
+    const btnReplaceOne = document.getElementById('btnReplaceOne');
+    const btnReplaceAll = document.getElementById('btnReplaceAll');
+
+    let findMatches = [];
+    let currentMatchIndex = -1;
+    let matchCase = false;
+
+    function openFind(withReplace = false) {
+      findWidget.classList.remove('hidden');
+      if (withReplace) {
+        replaceRow.classList.remove('hidden');
+        findToggleReplace.textContent = '▼';
+      }
+
+      const selStart = codeEditor.selectionStart;
+      const selEnd = codeEditor.selectionEnd;
+      if (selEnd > selStart) {
+        const selected = codeEditor.value.substring(selStart, selEnd);
+        if (selected && !selected.includes('\n')) {
+          findInput.value = selected;
+        }
+      }
+
+      if (withReplace && findInput.value) {
+        replaceInput.focus();
+        replaceInput.select();
+      } else {
+        findInput.focus();
+        findInput.select();
+      }
+      performFind();
+    }
+
+    function closeFind() {
+      findWidget.classList.add('hidden');
+      codeEditor.focus();
+    }
+
+    function performFind() {
+      const query = findInput.value;
+      findMatches = [];
+      currentMatchIndex = -1;
+
+      if (!query) {
+        findMatchesCount.textContent = 'No results';
+        return;
+      }
+
+      const text = codeEditor.value;
+      const flags = matchCase ? 'g' : 'gi';
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let regex;
+      try {
+        regex = new RegExp(escaped, flags);
+      } catch (e) {
+        findMatchesCount.textContent = 'Invalid';
+        return;
+      }
+
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        findMatches.push({ start: match.index, end: match.index + match[0].length });
+        if (match[0].length === 0) {
+          regex.lastIndex++;
+        }
+      }
+
+      if (findMatches.length > 0) {
+        const cursor = codeEditor.selectionStart;
+        let nextIdx = findMatches.findIndex(m => m.start >= cursor);
+        if (nextIdx === -1) nextIdx = 0;
+        highlightMatch(nextIdx);
+      } else {
+        findMatchesCount.textContent = 'No results';
+      }
+    }
+
+    function highlightMatch(index, shouldFocusEditor = false) {
+      if (index < 0 || index >= findMatches.length) return;
+      currentMatchIndex = index;
+      const m = findMatches[index];
+      findMatchesCount.textContent = `${index + 1} of ${findMatches.length}`;
+
+      const activeEl = document.activeElement;
+      codeEditor.setSelectionRange(m.start, m.end);
+      if (shouldFocusEditor) {
+        codeEditor.focus();
+      } else if (activeEl && typeof activeEl.focus === 'function') {
+        activeEl.focus();
+      }
+
+      const linesBefore = codeEditor.value.substring(0, m.start).split('\n');
+      const lineNum = linesBefore.length;
+      const lineHeight = 20;
+      const targetScroll = Math.max(0, (lineNum - 5) * lineHeight);
+      codeEditor.scrollTop = targetScroll;
+      lineNumbers.scrollTop = targetScroll;
+    }
+
+    function nextMatch() {
+      if (findMatches.length === 0) return;
+      const next = (currentMatchIndex + 1) % findMatches.length;
+      highlightMatch(next);
+    }
+
+    function prevMatch() {
+      if (findMatches.length === 0) return;
+      const prev = (currentMatchIndex - 1 + findMatches.length) % findMatches.length;
+      highlightMatch(prev);
+    }
+
+    function replaceCurrent() {
+      if (currentMatchIndex < 0 || currentMatchIndex >= findMatches.length) return;
+      const m = findMatches[currentMatchIndex];
+      const rep = replaceInput.value;
+
+      codeEditor.value = codeEditor.value.substring(0, m.start) + rep + codeEditor.value.substring(m.end);
+      updateLineNumbers();
+      editorStatus.textContent = 'Unsaved changes';
+
+      performFind();
+    }
+
+    function replaceAll() {
+      const query = findInput.value;
+      if (!query || findMatches.length === 0) return;
+      const rep = replaceInput.value;
+      const flags = matchCase ? 'g' : 'gi';
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, flags);
+
+      codeEditor.value = codeEditor.value.replace(regex, rep);
+      updateLineNumbers();
+      editorStatus.textContent = 'Unsaved changes';
+      performFind();
+    }
+
+    function getPdfTarget() {
+      if (currentFile && currentFile.endsWith('.tex')) {
+        const base = currentFile.split('/').pop().replace(/\.tex$/, '.pdf');
+        return base;
+      }
+      return 'main.pdf';
+    }
+
+    let wordWrap = true;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    const measureDiv = document.createElement('div');
+    measureDiv.id = 'measureDiv';
+    measureDiv.style.cssText = `
+      position: absolute;
+      top: -99999px;
+      left: -99999px;
+      visibility: hidden;
+      height: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 20px;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      border: none;
+    `;
+    document.body.appendChild(measureDiv);
+
+    // Update Line Numbers & Error Gutter (with Word Wrap Height Alignment)
+    function updateLineNumbers() {
+      const lines = codeEditor.value.split('\n');
+      const curBase = currentFile.split('/').pop();
+      const errLines = new Set(
+        diagnostics
+          .filter(d => (!d.file || d.file === currentFile || d.file.endsWith(curBase)) && d.severity === 'error')
+          .map(d => d.line)
+      );
+
+      if (!wordWrap) {
+        codeEditor.style.whiteSpace = 'pre';
+        codeEditor.style.overflowWrap = 'normal';
+        codeEditor.style.wordBreak = 'normal';
+        codeEditor.style.overflowX = 'auto';
+        let nums = '';
+        for (let i = 1; i <= lines.length; i++) {
+          const isErr = errLines.has(i);
+          nums += `<div class="${isErr ? 'err-line' : ''}" style="height:20px;line-height:20px;">${i}</div>`;
+        }
+        lineNumbers.innerHTML = nums;
+        return;
+      }
+
+      // Word Wrap is ON
+      codeEditor.style.whiteSpace = 'pre-wrap';
+      codeEditor.style.overflowWrap = 'break-word';
+      codeEditor.style.wordBreak = 'break-word';
+      codeEditor.style.overflowX = 'hidden';
+
+      const width = codeEditor.clientWidth;
+      if (width > 0) {
+        measureDiv.style.width = width + 'px';
+      }
+
+      measureDiv.innerHTML = lines.map(line => `<div>${escapeHtml(line) || '&nbsp;'}</div>`).join('');
+
+      const children = measureDiv.children;
+      let nums = '';
+      for (let i = 0; i < lines.length; i++) {
+        const lineNum = i + 1;
+        const h = children[i] ? children[i].getBoundingClientRect().height : 20;
+        const isErr = errLines.has(lineNum);
+        nums += `<div class="${isErr ? 'err-line' : ''}" style="height:${h}px;line-height:20px;">${lineNum}</div>`;
+      }
+      lineNumbers.innerHTML = nums;
+    }
+
+    const btnToggleWrap = document.getElementById('btnToggleWrap');
+    btnToggleWrap.onclick = () => {
+      wordWrap = !wordWrap;
+      btnToggleWrap.textContent = wordWrap ? '↩ Wrap: On' : '↩ Wrap: Off';
+      btnToggleWrap.style.color = wordWrap ? 'var(--text-bright)' : 'var(--text-muted)';
+      updateLineNumbers();
+    };
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(() => {
+        if (wordWrap) {
+          updateLineNumbers();
+        }
+      }).observe(codeEditor);
+    }
+
+    codeEditor.addEventListener('scroll', () => {
+      lineNumbers.scrollTop = codeEditor.scrollTop;
+    });
+
+    codeEditor.addEventListener('input', () => {
+      updateLineNumbers();
+      editorStatus.textContent = 'Unsaved changes';
+    });
+
+    codeEditor.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = codeEditor.selectionStart;
+        const end = codeEditor.selectionEnd;
+        codeEditor.value = codeEditor.value.substring(0, start) + '  ' + codeEditor.value.substring(end);
+        codeEditor.selectionStart = codeEditor.selectionEnd = start + 2;
+        updateLineNumbers();
+      }
+    });
+
+    logBar.addEventListener('click', () => {
+      logPanel.classList.toggle('collapsed');
+      logToggle.textContent = logPanel.classList.contains('collapsed') ? '▲' : '▼';
+    });
+
+    // Helper: Determine File Icon
+    function getFileIcon(name, isDir) {
+      if (isDir) return '📁';
+      const ext = name.split('.').pop().toLowerCase();
+      switch (ext) {
+        case 'tex': return '📄';
+        case 'pdf': return '📕';
+        case 'png':
+        case 'jpg':
+        case 'jpeg':
+        case 'svg': return '🖼️';
+        case 'bib': return '📚';
+        case 'py': return '🐍';
+        case 'ipynb': return '📓';
+        default: return '📝';
+      }
+    }
+
+    // Build hierarchical directory tree from file list
+    function buildFileTree(list) {
+      const root = { name: '', path: '', isDir: true, children: {} };
+
+      list.forEach(f => {
+        const parts = f.path.split('/');
+        let cur = root;
+        let curPath = '';
+
+        parts.forEach((p, idx) => {
+          curPath = curPath ? `${curPath}/${p}` : p;
+          const isLeaf = (idx === parts.length - 1);
+
+          if (!cur.children[p]) {
+            cur.children[p] = {
+              name: p,
+              path: curPath,
+              isDir: isLeaf ? f.is_dir : true,
+              children: {},
+            };
+          }
+          cur = cur.children[p];
+        });
+      });
+
+      return root;
+    }
+
+    function renderTree(node, container) {
+      const entries = Object.values(node.children);
+      // Sort folders first, then files alphabetically
+      entries.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      entries.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'tree-row' + (item.path === currentFile ? ' active' : '');
+
+        if (item.isDir) {
+          const isExpanded = folderState[item.path] !== false; // default open
+          row.innerHTML = `
+            <span class="tree-arrow ${isExpanded ? '' : 'collapsed'}">▼</span>
+            <span class="tree-icon">${isExpanded ? '📂' : '📁'}</span>
+            <span class="tree-label">${item.name}</span>
+          `;
+
+          const childContainer = document.createElement('div');
+          childContainer.className = 'tree-children' + (isExpanded ? '' : ' hidden');
+          renderTree(item, childContainer);
+
+          row.onclick = () => {
+            const nextState = !isExpanded;
+            folderState[item.path] = nextState;
+            renderFileTree();
+          };
+
+          container.appendChild(row);
+          container.appendChild(childContainer);
+        } else {
+          row.innerHTML = `
+            <span class="tree-arrow empty">•</span>
+            <span class="tree-icon">${getFileIcon(item.name, false)}</span>
+            <span class="tree-label">${item.name}</span>
+            <span class="tree-delete" title="Delete">✕</span>
+          `;
+
+          row.onclick = (e) => {
+            if (e.target.classList.contains('tree-delete')) {
+              deleteFile(item.path);
+            } else {
+              selectFile(item.path);
+            }
+          };
+
+          container.appendChild(row);
+        }
+      });
+    }
+
+    function renderFileTree() {
+      fileTree.innerHTML = '';
+      const tree = buildFileTree(files);
+      renderTree(tree, fileTree);
+    }
+
+    // Load Files
+    async function loadFiles() {
+      try {
+        const res = await fetch('/api/files');
+        if (res.ok) {
+          files = await res.json();
+          renderFileTree();
+
+          // Auto-select initial file if none selected
+          if (!currentFile || !files.some(f => f.path === currentFile)) {
+            // Priority: main.tex -> any .tex -> first file
+            const texFiles = files.filter(f => !f.is_dir && f.path.endsWith('.tex'));
+            if (texFiles.length > 0) {
+              const preferred = texFiles.find(f => f.name === 'main.tex') ||
+                                texFiles[0];
+              await selectFile(preferred.path);
+            } else if (files.length > 0) {
+              await selectFile(files[0].path);
+            } else {
+              // Truly empty workspace: create starter main.tex
+              await selectFile('main.tex');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load files:', err);
+      }
+    }
+
+    async function selectFile(path) {
+      if (currentFile && currentFile !== path && codeEditor.value) {
+        await saveFile();
+      }
+      currentFile = path;
+      headerFile.textContent = '• ' + currentFile;
+      renderFileTree();
+      await loadFileContent(currentFile);
+    }
+
+    async function loadFileContent(path) {
+      try {
+        const res = await fetch('/api/files/content?path=' + encodeURIComponent(path));
+        if (res.ok) {
+          codeEditor.value = await res.text();
+        } else if (res.status === 404 && path === 'main.tex' && files.length === 0) {
+          // Initialize starter LaTeX template for blank directory
+          const starter = `\\documentclass{article}
+\\usepackage{amsmath}
+
+\\title{LaTeX Document}
+\\author{Author}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+\\section{Introduction}
+Welcome to your local \\LaTeX{} web editor!
+\\end{document}
+`;
+          codeEditor.value = starter;
+          await saveFile();
+          await loadFiles();
+        }
+        updateLineNumbers();
+        editorStatus.textContent = 'Saved';
+      } catch (err) {
+        console.error('Failed to load file content:', err);
+      }
+    }
+
+    async function saveFile() {
+      if (!currentFile) return;
+      try {
+        await fetch('/api/files/content?path=' + encodeURIComponent(currentFile), {
+          method: 'POST',
+          body: codeEditor.value,
+        });
+        editorStatus.textContent = 'Saved';
+      } catch (err) {
+        console.error('Save failed:', err);
+      }
+    }
+
+    async function compileProject() {
+      if (isCompiling) return;
+      isCompiling = true;
+      btnCompile.disabled = true;
+      document.getElementById('compileIcon').className = 'spin';
+      editorStatus.textContent = 'Compiling...';
+
+      await saveFile();
+
+      const compileTarget = (currentFile && currentFile.endsWith('.tex')) ? currentFile : 'main.tex';
+
+      try {
+        const res = await fetch('/api/compile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ main_file: compileTarget }),
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          handleCompileResult(result);
+        }
+      } catch (err) {
+        console.error('Compile failed:', err);
+      } finally {
+        isCompiling = false;
+        btnCompile.disabled = false;
+        document.getElementById('compileIcon').className = '';
+      }
+    }
+
+    function handleCompileResult(result) {
+      diagnostics = result.diagnostics || [];
+      updateLineNumbers();
+
+      const errors = diagnostics.filter(d => d.severity === 'error');
+      const warnings = diagnostics.filter(d => d.severity === 'warning');
+
+      statErrors.textContent = `${errors.length} Error${errors.length === 1 ? '' : 's'}`;
+      statWarnings.textContent = `${warnings.length} Warning${warnings.length === 1 ? '' : 's'}`;
+      statDuration.textContent = `(${result.duration_ms}ms)`;
+
+      if (errors.length > 0) {
+        statErrors.className = 'stat-err';
+        logPanel.classList.remove('collapsed');
+        logToggle.textContent = '▼';
+      } else {
+        statErrors.className = 'stat-ok';
+      }
+
+      if (diagnostics.length === 0) {
+        logBody.innerHTML = '<div style="color: var(--success); font-weight: 500;">✓ Clean build! No errors or warnings.</div>';
+      } else {
+        logBody.innerHTML = diagnostics.map(d => `
+          <div class="diag-item ${d.severity}" onclick="jumpToLine(${d.line})">
+            <strong>${d.file || currentFile}:${d.line || 1}</strong>: ${d.message}
+            ${d.context ? `<div class="diag-context">${d.context}</div>` : ''}
+          </div>
+        `).join('');
+      }
+
+      if (result.success) {
+        editorStatus.textContent = 'Build succeeded';
+        const pdfFile = getPdfTarget();
+        pdfFrame.src = `/api/pdf?file=${encodeURIComponent(pdfFile)}&t=${Date.now()}`;
+        pdfFrame.style.display = 'block';
+        pdfEmpty.style.display = 'none';
+      } else {
+        editorStatus.textContent = 'Build failed';
+      }
+    }
+
+    function jumpToLine(lineNumber) {
+      if (!lineNumber) return;
+      const lines = codeEditor.value.split('\n');
+      let charPos = 0;
+      for (let i = 0; i < Math.min(lineNumber - 1, lines.length); i++) {
+        charPos += lines[i].length + 1;
+      }
+      codeEditor.focus();
+      codeEditor.setSelectionRange(charPos, charPos + (lines[lineNumber - 1] ? lines[lineNumber - 1].length : 0));
+
+      const lineHeight = 20;
+      codeEditor.scrollTop = Math.max(0, (lineNumber - 5) * lineHeight);
+      lineNumbers.scrollTop = codeEditor.scrollTop;
+    }
+
+    async function deleteFile(path) {
+      if (!confirm(`Delete ${path}?`)) return;
+      await fetch('/api/files?path=' + encodeURIComponent(path), { method: 'DELETE' });
+      await loadFiles();
+    }
+
+    document.getElementById('btnNewFile').onclick = async () => {
+      const name = prompt('Enter new filename (e.g. chapter1.tex):');
+      if (name && name.trim()) {
+        const cleanName = name.trim();
+        await fetch('/api/files/content?path=' + encodeURIComponent(cleanName), {
+          method: 'POST',
+          body: '% ' + cleanName + '\n',
+        });
+        await loadFiles();
+        selectFile(cleanName);
+      }
+    };
+
+    btnSave.onclick = saveFile;
+    btnCompile.onclick = compileProject;
+    document.getElementById('btnInitialCompile').onclick = compileProject;
+
+    document.getElementById('btnDownload').onclick = () => {
+      window.open(`/api/pdf?file=${encodeURIComponent(getPdfTarget())}`, '_blank');
+    };
+    document.getElementById('btnOpenNew').onclick = () => {
+      window.open(`/api/pdf?file=${encodeURIComponent(getPdfTarget())}`, '_blank');
+    };
+
+    function getCurrentLineNumber() {
+      const pos = codeEditor.selectionStart;
+      const text = codeEditor.value.substring(0, pos);
+      return text.split('\n').length;
+    }
+
+    async function syncTexForward() {
+      const line = getCurrentLineNumber();
+      editorStatus.textContent = `Syncing line ${line}...`;
+      try {
+        const res = await fetch('/api/synctex/forward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file: currentFile, line: line })
+        });
+        if (res.ok) {
+          const fwd = await res.json();
+          editorStatus.textContent = `Synced to Page ${fwd.page}`;
+          const pdfFile = getPdfTarget();
+          pdfFrame.src = `/api/pdf?file=${encodeURIComponent(pdfFile)}&t=${Date.now()}#page=${fwd.page}&view=FitH,${Math.round(fwd.y)}`;
+        } else {
+          editorStatus.textContent = 'Sync location not found in PDF';
+        }
+      } catch (err) {
+        console.error('SyncTeX failed:', err);
+      }
+    }
+
+    document.getElementById('btnSyncTex').onclick = syncTexForward;
+
+    // Find & Replace Event Listeners
+    btnFind.onclick = () => openFind(false);
+    findClose.onclick = closeFind;
+    findNext.onclick = nextMatch;
+    findPrev.onclick = prevMatch;
+    btnReplaceOne.onclick = replaceCurrent;
+    btnReplaceAll.onclick = replaceAll;
+
+    findToggleReplace.onclick = () => {
+      const isHidden = replaceRow.classList.toggle('hidden');
+      findToggleReplace.textContent = isHidden ? '▶' : '▼';
+      if (!isHidden) {
+        replaceInput.focus();
+      }
+    };
+
+    findCaseSensitive.onclick = () => {
+      matchCase = !matchCase;
+      findCaseSensitive.classList.toggle('active', matchCase);
+      performFind();
+    };
+
+    findInput.addEventListener('input', performFind);
+
+    findInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          prevMatch();
+        } else {
+          nextMatch();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFind();
+      }
+    });
+
+    replaceInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        replaceCurrent();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFind();
+      }
+    });
+
+    // Hotkeys: Ctrl+F, Ctrl+H, Ctrl+S, Ctrl+Enter, Ctrl+J, Escape
+    window.addEventListener('keydown', (e) => {
+      const isCmdOrCtrl = (e.ctrlKey || e.metaKey);
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        openFind(false);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        openFind(true);
+      } else if (e.key === 'Escape' && !findWidget.classList.contains('hidden')) {
+        e.preventDefault();
+        closeFind();
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveFile().then(compileProject);
+      } else if (isCmdOrCtrl && e.key === 'Enter') {
+        e.preventDefault();
+        compileProject();
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        syncTexForward();
+      }
+    });
+
+    // Listen to SSE compile events
+    const evtSource = new EventSource('/api/events');
+    evtSource.addEventListener('compile_start', () => {
+      isCompiling = true;
+      btnCompile.disabled = true;
+      document.getElementById('compileIcon').className = 'spin';
+    });
+    evtSource.addEventListener('compile_done', (e) => {
+      try {
+        const res = JSON.parse(e.data);
+        handleCompileResult(res);
+      } catch (err) {}
+      isCompiling = false;
+      btnCompile.disabled = false;
+      document.getElementById('compileIcon').className = '';
+    });
+
+    // Startup
+    loadFiles().then(() => {
+      if (currentFile) {
+        loadFileContent(currentFile).then(compileProject);
+      }
+    });
+  </script>
+</body>
+</html>
