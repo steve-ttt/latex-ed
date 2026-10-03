@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -36,14 +37,16 @@ func (s *SyncTex) ForwardSearch(ctx context.Context, q ForwardQuery) (*ForwardRe
 
 	inputSpec := fmt.Sprintf("%d:%d:%s", q.Line, col, q.File)
 
+	synDir := resolveSyncTexDir(q.Dir, q.PdfFile)
+
 	args := []string{"view", "-i", inputSpec, "-o", q.PdfFile}
-	if q.Dir != "" {
-		args = append(args, "-d", q.Dir)
+	if synDir != "" {
+		args = append(args, "-d", synDir)
 	}
 
 	cmd := exec.CommandContext(ctx, binary, args...)
-	if q.Dir != "" {
-		cmd.Dir = q.Dir
+	if synDir != "" {
+		cmd.Dir = synDir
 	} else {
 		cmd.Dir = filepath.Dir(q.PdfFile)
 	}
@@ -120,14 +123,16 @@ func (s *SyncTex) InverseSearch(ctx context.Context, q InverseQuery) (*InverseRe
 
 	outputSpec := fmt.Sprintf("%d:%f:%f:%s", q.Page, q.X, q.Y, q.PdfFile)
 
+	synDir := resolveSyncTexDir(q.Dir, q.PdfFile)
+
 	args := []string{"edit", "-o", outputSpec}
-	if q.Dir != "" {
-		args = append(args, "-d", q.Dir)
+	if synDir != "" {
+		args = append(args, "-d", synDir)
 	}
 
 	cmd := exec.CommandContext(ctx, binary, args...)
-	if q.Dir != "" {
-		cmd.Dir = q.Dir
+	if synDir != "" {
+		cmd.Dir = synDir
 	} else {
 		cmd.Dir = filepath.Dir(q.PdfFile)
 	}
@@ -171,4 +176,47 @@ func (s *SyncTex) InverseSearch(ctx context.Context, q InverseQuery) (*InverseRe
 	}
 
 	return res, nil
+}
+
+func resolveSyncTexDir(dir, pdfFile string) string {
+	pdfDir := filepath.Dir(pdfFile)
+	base := strings.TrimSuffix(filepath.Base(pdfFile), filepath.Ext(pdfFile))
+
+	// If explicit dir given, check if synctex file exists there
+	if dir != "" {
+		if hasSyncTexArtifact(dir, base) {
+			return dir
+		}
+		// Also check dir/.latex-cache
+		cacheSub := filepath.Join(dir, ".latex-cache")
+		if hasSyncTexArtifact(cacheSub, base) {
+			return cacheSub
+		}
+	}
+
+	// Check pdf directory
+	if hasSyncTexArtifact(pdfDir, base) {
+		return pdfDir
+	}
+
+	// Check pdfDir/.latex-cache
+	cacheInPdfDir := filepath.Join(pdfDir, ".latex-cache")
+	if hasSyncTexArtifact(cacheInPdfDir, base) {
+		return cacheInPdfDir
+	}
+
+	if dir != "" {
+		return dir
+	}
+	return pdfDir
+}
+
+func hasSyncTexArtifact(dir, baseName string) bool {
+	if fi, err := os.Stat(filepath.Join(dir, baseName+".synctex.gz")); err == nil && !fi.IsDir() {
+		return true
+	}
+	if fi, err := os.Stat(filepath.Join(dir, baseName+".synctex")); err == nil && !fi.IsDir() {
+		return true
+	}
+	return false
 }

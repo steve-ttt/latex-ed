@@ -780,6 +780,13 @@
   }
 
   async function selectFile(path) {
+    if (path && path.endsWith('.pdf')) {
+      pdfFrame.src = `/api/pdf?file=${encodeURIComponent(path)}&t=${Date.now()}`;
+      pdfFrame.style.display = 'block';
+      pdfEmpty.style.display = 'none';
+      return;
+    }
+
     if (currentFile && currentFile !== path && codeEditor.value) {
       await saveFile();
     }
@@ -846,7 +853,7 @@ Welcome to your local \\LaTeX{} web editor!
   // ----------------------------------------------------------------------------
   function getPdfTarget() {
     if (currentFile && currentFile.endsWith('.tex')) {
-      return currentFile.split('/').pop().replace(/\.tex$/, '.pdf');
+      return currentFile.replace(/\.tex$/, '.pdf');
     }
     return 'main.pdf';
   }
@@ -902,6 +909,8 @@ Welcome to your local \\LaTeX{} web editor!
         logPanel.classList.add('collapsed');
         logToggle.textContent = '▲';
       }
+
+      loadFiles();
     } else {
       editorStatus.textContent = 'Compilation failed';
       logPanel.classList.remove('collapsed');

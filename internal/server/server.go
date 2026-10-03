@@ -458,7 +458,11 @@ func (s *Server) handleSyncTexForward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if q.Dir == "" {
-		q.Dir = filepath.Dir(q.PdfFile)
+		if res != nil && res.SynctexFile != "" {
+			q.Dir = filepath.Dir(res.SynctexFile)
+		} else {
+			q.Dir = filepath.Dir(q.PdfFile)
+		}
 	}
 
 	fwd, err := s.synctex.ForwardSearch(r.Context(), q)
@@ -497,7 +501,11 @@ func (s *Server) handleSyncTexInverse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if q.Dir == "" {
-		q.Dir = filepath.Dir(q.PdfFile)
+		if res != nil && res.SynctexFile != "" {
+			q.Dir = filepath.Dir(res.SynctexFile)
+		} else {
+			q.Dir = filepath.Dir(q.PdfFile)
+		}
 	}
 
 	inv, err := s.synctex.InverseSearch(r.Context(), q)

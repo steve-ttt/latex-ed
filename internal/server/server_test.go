@@ -369,3 +369,71 @@ func TestServer_CORS_Policy(t *testing.T) {
 	}
 }
 
+func TestServer_CompileCopiesPdfToSourceDir(t *testing.T) {
+	if _, err := exec.LookPath("pdflatex"); err != nil {
+		t.Skip("pdflatex not found on PATH, skipping integration test")
+	}
+
+	tmpDir := t.TempDir()
+	ws, err := workspace.New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to init workspace: %v", err)
+	}
+
+	texContent := `\documentclass{article}
+\begin{document}
+Document alongside PDF test
+\end{document}`
+	if err := ws.WriteFile("anealing.tex", []byte(texContent)); err != nil {
+		t.Fatalf("failed to write tex: %v", err)
+	}
+
+	engine := compiler.NewPdflatexEngine()
+	srv := New(ws, engine)
+	handler := srv.Routes()
+
+	// Compile anealing.tex
+	compileReq := httptest.NewRequest(http.MethodPost, "/api/compile", bytes.NewBufferString(`{"main_file":"anealing.tex"}`))
+	compileReq.Header.Set("Content-Type", "application/json")
+	compileRec := httptest.NewRecorder()
+	handler.ServeHTTP(compileRec, compileReq)
+
+	if compileRec.Code != http.StatusOK {
+		t.Fatalf("compile failed: %d - %s", compileRec.Code, compileRec.Body.String())
+	}
+
+	// 1. Verify anealing.pdf exists in the same directory as anealing.tex
+	pdfInSource := filepath.Join(tmpDir, "anealing.pdf")
+	if fi, err := os.Stat(pdfInSource); err != nil || fi.Size() == 0 {
+		t.Fatalf("expected anealing.pdf in source dir, err: %v", err)
+	}
+
+	// 2. Verify .latex-cache artifacts remain
+	pdfInCache := filepath.Join(tmpDir, ".latex-cache", "anealing.pdf")
+	if fi, err := os.Stat(pdfInCache); err != nil || fi.Size() == 0 {
+		t.Fatalf("expected anealing.pdf in .latex-cache, err: %v", err)
+	}
+
+	// 3. Verify GET /api/files lists anealing.pdf in workspace
+	listReq := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	listRec := httptest.NewRecorder()
+	handler.ServeHTTP(listRec, listReq)
+
+	var files []workspace.FileInfo
+	if err := json.Unmarshal(listRec.Body.Bytes(), &files); err != nil {
+		t.Fatalf("unmarshal files failed: %v", err)
+	}
+
+	foundPdf := false
+	for _, f := range files {
+		if f.Path == "anealing.pdf" {
+			foundPdf = true
+			break
+		}
+	}
+	if !foundPdf {
+		t.Errorf("expected anealing.pdf in workspace file list, got: %+v", files)
+	}
+}
+
+

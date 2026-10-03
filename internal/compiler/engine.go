@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,6 +112,16 @@ func (e *PdflatexEngine) Compile(ctx context.Context, req CompileRequest) (*Comp
 
 	if pdfExists {
 		res.PdfFile = pdfPath
+
+		// On successful creation of the PDF, copy the PDF back to the same directory
+		// as the source .tex file while keeping artifacts in .latex-cache.
+		if success {
+			targetDir := filepath.Join(req.RootDir, filepath.Dir(req.MainFile))
+			targetPdf := filepath.Join(targetDir, baseName+".pdf")
+			if err := copyFile(pdfPath, targetPdf); err == nil {
+				res.PdfFile = targetPdf
+			}
+		}
 	}
 
 	synctexGz := filepath.Join(cacheDir, baseName+".synctex.gz")
@@ -124,4 +135,33 @@ func (e *PdflatexEngine) Compile(ctx context.Context, req CompileRequest) (*Comp
 	}
 
 	return res, nil
+}
+
+func copyFile(src, dst string) error {
+	srcClean := filepath.Clean(src)
+	dstClean := filepath.Clean(dst)
+	if srcClean == dstClean {
+		return nil
+	}
+
+	in, err := os.Open(srcClean)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dstClean), 0755); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dstClean, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }

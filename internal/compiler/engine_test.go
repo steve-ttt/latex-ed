@@ -60,10 +60,16 @@ Hello from TDD LaTeX Editor!
 		t.Fatalf("generated file is not a valid PDF header: %q", string(pdfData[:10]))
 	}
 
-	// Verify build artifact is in the cache directory, not polluting root
-	expectedCache := filepath.Join(tmpDir, ".latex-cache")
-	if filepath.Dir(result.PdfFile) != expectedCache {
-		t.Errorf("expected PDF in %s, got %s", expectedCache, filepath.Dir(result.PdfFile))
+	// Verify output PDF is in the same directory as the source .tex file
+	expectedPdf := filepath.Join(tmpDir, "main.pdf")
+	if result.PdfFile != expectedPdf {
+		t.Errorf("expected PDF at %s, got %s", expectedPdf, result.PdfFile)
+	}
+
+	// Verify build artifacts remain in the cache directory
+	expectedCachePdf := filepath.Join(tmpDir, ".latex-cache", "main.pdf")
+	if _, err := os.Stat(expectedCachePdf); err != nil {
+		t.Errorf("expected cache PDF at %s, but stat failed: %v", expectedCachePdf, err)
 	}
 
 	if result.SynctexFile == "" {
