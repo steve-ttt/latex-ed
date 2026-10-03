@@ -199,3 +199,99 @@ func TestWorkspace_SafePath_SymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestWorkspace_CreateDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// 1. Create simple directory
+	if err := ws.CreateDirectory("module1"); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(tmpDir, "module1"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected directory module1 to exist, got err: %v", err)
+	}
+
+	// 2. Create nested directory
+	if err := ws.CreateDirectory("chapters/subchapters/deep"); err != nil {
+		t.Fatalf("failed to create nested directory: %v", err)
+	}
+	info, err = os.Stat(filepath.Join(tmpDir, "chapters", "subchapters", "deep"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected nested directory to exist, got err: %v", err)
+	}
+
+	// 3. Creating directory should appear in ListFiles()
+	files, err := ws.ListFiles()
+	if err != nil {
+		t.Fatalf("failed to list files: %v", err)
+	}
+	foundModule := false
+	for _, f := range files {
+		if f.Path == "module1" && f.IsDir {
+			foundModule = true
+			break
+		}
+	}
+	if !foundModule {
+		t.Errorf("expected module1 directory in ListFiles, got: %+v", files)
+	}
+
+	// 4. Traversal rejection
+	if err := ws.CreateDirectory("../escaped"); err == nil {
+		t.Errorf("expected error creating directory with path traversal, got nil")
+	}
+	if err := ws.CreateDirectory("/tmp/evil"); err == nil {
+		t.Errorf("expected error creating absolute directory, got nil")
+	}
+}
+
+func TestWorkspace_CreateFileInSubdirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	texData := []byte("\\section{Subchapter}\nSubchapter content\n")
+	// Create file in new subdirectory
+	if err := ws.WriteFile("module4/notes.tex", texData); err != nil {
+		t.Fatalf("failed to write file in subdirectory: %v", err)
+	}
+
+	// Check file on disk
+	content, err := ws.ReadFile("module4/notes.tex")
+	if err != nil {
+		t.Fatalf("failed to read file in subdirectory: %v", err)
+	}
+	if string(content) != string(texData) {
+		t.Errorf("content mismatch: got %q, want %q", string(content), string(texData))
+	}
+
+	// Verify both directory and file are in ListFiles
+	files, err := ws.ListFiles()
+	if err != nil {
+		t.Fatalf("failed to list files: %v", err)
+	}
+	foundDir := false
+	foundFile := false
+	for _, f := range files {
+		if f.Path == "module4" && f.IsDir {
+			foundDir = true
+		}
+		if f.Path == "module4/notes.tex" && !f.IsDir {
+			foundFile = true
+		}
+	}
+	if !foundDir {
+		t.Errorf("expected module4 in file list")
+	}
+	if !foundFile {
+		t.Errorf("expected module4/notes.tex in file list")
+	}
+}
+
+

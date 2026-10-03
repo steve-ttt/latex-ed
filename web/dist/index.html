@@ -27,7 +27,10 @@
       <aside id="sidebar">
         <div class="aside-header">
           <span>PROJECT FILES</span>
-          <button id="btnNewFile" style="padding: 2px 6px;" title="New File">+</button>
+          <div style="display: flex; gap: 4px;">
+            <button id="btnNewFile" style="padding: 2px 6px; font-size: 11px;" title="New File (e.g. filename.tex or folder/filename.tex)">+ File</button>
+            <button id="btnNewFolder" style="padding: 2px 6px; font-size: 11px;" title="New Subdirectory">+ Folder</button>
+          </div>
         </div>
         <div class="file-tree-container" id="fileTree"></div>
       </aside>

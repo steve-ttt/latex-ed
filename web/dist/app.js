@@ -35,6 +35,7 @@
   const btnToggleWrap = document.getElementById('btnToggleWrap');
   const btnSyncTex = document.getElementById('btnSyncTex');
   const btnNewFile = document.getElementById('btnNewFile');
+  const btnNewFolder = document.getElementById('btnNewFolder');
   const btnInitialCompile = document.getElementById('btnInitialCompile');
   const btnDownload = document.getElementById('btnDownload');
   const btnOpenNew = document.getElementById('btnOpenNew');
@@ -704,16 +705,24 @@
           <span class="tree-arrow ${isExpanded ? '' : 'collapsed'}">▼</span>
           <span class="tree-icon">${isExpanded ? '📂' : '📁'}</span>
           <span class="tree-label">${escapeHtml(item.name)}</span>
+          <span class="tree-action tree-new-file" title="New file in this folder">+</span>
+          <span class="tree-delete" title="Delete folder">✕</span>
         `;
 
         const childContainer = document.createElement('div');
         childContainer.className = 'tree-children' + (isExpanded ? '' : ' hidden');
         renderTree(item, childContainer);
 
-        row.onclick = () => {
-          const nextState = !isExpanded;
-          folderState[item.path] = nextState;
-          renderFileTree();
+        row.onclick = (e) => {
+          if (e.target.classList.contains('tree-delete')) {
+            deleteDirectory(item.path);
+          } else if (e.target.classList.contains('tree-new-file')) {
+            createFileInDir(item.path);
+          } else {
+            const nextState = !isExpanded;
+            folderState[item.path] = nextState;
+            renderFileTree();
+          }
         };
 
         container.appendChild(row);
@@ -846,6 +855,47 @@ Welcome to your local \\LaTeX{} web editor!
     if (!confirm(`Delete ${path}?`)) return;
     await fetch('/api/files?path=' + encodeURIComponent(path), { method: 'DELETE' });
     await loadFiles();
+  }
+
+  async function createFileInDir(dirPath) {
+    const input = prompt(`Enter new file in "${dirPath}/" (e.g. chapter1.tex):`);
+    if (!input || !input.trim()) return;
+    let name = input.trim().replace(/^\/+|\/+$/g, '');
+    if (!name.includes('.')) {
+      name += '.tex';
+    }
+    const fullPath = `${dirPath}/${name}`;
+    try {
+      const res = await fetch('/api/files/content?path=' + encodeURIComponent(fullPath), {
+        method: 'POST',
+        body: '% ' + name.split('/').pop() + '\n',
+      });
+      if (res.ok) {
+        folderState[dirPath] = true;
+        expandParents(fullPath);
+        await loadFiles();
+        await selectFile(fullPath);
+      } else {
+        alert('Failed to create file: ' + (await res.text()));
+      }
+    } catch (err) {
+      console.error('Failed to create file in folder:', err);
+    }
+  }
+
+  async function deleteDirectory(dirPath) {
+    if (!confirm(`Delete folder "${dirPath}" and all its contents?`)) return;
+    try {
+      const res = await fetch('/api/files?path=' + encodeURIComponent(dirPath), { method: 'DELETE' });
+      if (res.ok) {
+        delete folderState[dirPath];
+        await loadFiles();
+      } else {
+        alert('Failed to delete folder: ' + (await res.text()));
+      }
+    } catch (err) {
+      console.error('Failed to delete directory:', err);
+    }
   }
 
   // ----------------------------------------------------------------------------
@@ -1019,17 +1069,50 @@ Welcome to your local \\LaTeX{} web editor!
   // 10. Event Listeners & Hotkeys Registration
   // ----------------------------------------------------------------------------
   btnNewFile.onclick = async () => {
-    const name = prompt('Enter new filename (e.g. chapter1.tex):');
-    if (name && name.trim()) {
-      const cleanName = name.trim();
-      await fetch('/api/files/content?path=' + encodeURIComponent(cleanName), {
+    const name = prompt('Enter new filename (e.g. chapter1.tex or module4/notes.tex):');
+    if (!name || !name.trim()) return;
+    let cleanName = name.trim().replace(/^\/+|\/+$/g, '');
+    if (!cleanName.includes('.')) {
+      cleanName += '.tex';
+    }
+    try {
+      const res = await fetch('/api/files/content?path=' + encodeURIComponent(cleanName), {
         method: 'POST',
-        body: '% ' + cleanName + '\n',
+        body: '% ' + cleanName.split('/').pop() + '\n',
       });
-      await loadFiles();
-      selectFile(cleanName);
+      if (res.ok) {
+        expandParents(cleanName);
+        await loadFiles();
+        await selectFile(cleanName);
+      } else {
+        alert('Failed to create file: ' + (await res.text()));
+      }
+    } catch (err) {
+      console.error('Failed to create file:', err);
     }
   };
+
+  if (btnNewFolder) {
+    btnNewFolder.onclick = async () => {
+      const name = prompt('Enter new subdirectory name (e.g. chapters or module4/notes):');
+      if (!name || !name.trim()) return;
+      const cleanPath = name.trim().replace(/^\/+|\/+$/g, '');
+      try {
+        const res = await fetch('/api/directories?path=' + encodeURIComponent(cleanPath), {
+          method: 'POST',
+        });
+        if (res.ok) {
+          folderState[cleanPath] = true;
+          expandParents(cleanPath);
+          await loadFiles();
+        } else {
+          alert('Failed to create directory: ' + (await res.text()));
+        }
+      } catch (err) {
+        console.error('Failed to create directory:', err);
+      }
+    };
+  }
 
   btnSave.onclick = saveFile;
   btnCompile.onclick = compileProject;

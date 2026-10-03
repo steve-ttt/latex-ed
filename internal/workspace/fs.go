@@ -149,6 +149,18 @@ func (w *Workspace) WriteFile(relPath string, data []byte) error {
 	return os.WriteFile(target, data, 0644)
 }
 
+// CreateDirectory creates a directory (and any necessary parent directories) within the workspace.
+func (w *Workspace) CreateDirectory(relPath string) error {
+	target, err := w.SafePath(relPath)
+	if err != nil {
+		return err
+	}
+	if target == w.rootDir || target == w.canonicalRoot {
+		return nil
+	}
+	return os.MkdirAll(target, 0755)
+}
+
 // DeleteFile removes a file or directory within the workspace.
 // If the target is a symlink, it removes the link without traversing it.
 func (w *Workspace) DeleteFile(relPath string) error {

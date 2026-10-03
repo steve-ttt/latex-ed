@@ -171,9 +171,12 @@ aside {
 
 .tree-icon { margin-right: 6px; font-size: 13px; display: inline-flex; align-items: center; }
 .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-delete { opacity: 0; font-size: 10px; color: var(--error); padding: 2px 4px; }
+.tree-action { opacity: 0; font-size: 12px; font-weight: bold; color: var(--success); padding: 1px 5px; border-radius: 2px; margin-right: 2px; transition: opacity 0.15s, background 0.15s; }
+.tree-row:hover .tree-action { opacity: 0.7; }
+.tree-action:hover { opacity: 1 !important; background: var(--bg-active); }
+.tree-delete { opacity: 0; font-size: 10px; color: var(--error); padding: 2px 4px; border-radius: 2px; }
 .tree-row:hover .tree-delete { opacity: 0.6; }
-.tree-delete:hover { opacity: 1 !important; }
+.tree-delete:hover { opacity: 1 !important; background: rgba(241, 76, 76, 0.2); }
 
 .tree-children { margin-left: 14px; }
 .tree-children.hidden { display: none; }

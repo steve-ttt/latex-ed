@@ -436,4 +436,100 @@ Document alongside PDF test
 	}
 }
 
+func TestServer_DirectoriesAPI(t *testing.T) {
+	srv, _, tmpDir := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. Create directory via query parameter
+	req1 := httptest.NewRequest(http.MethodPost, "/api/directories?path=module3", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for creating directory, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	info, err := os.Stat(filepath.Join(tmpDir, "module3"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected module3 directory on disk, got err: %v", err)
+	}
+
+	// 2. Create directory via JSON body
+	req2 := httptest.NewRequest(http.MethodPost, "/api/directories", bytes.NewBufferString(`{"path":"module4/sub"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for JSON directory creation, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	info, err = os.Stat(filepath.Join(tmpDir, "module4", "sub"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected module4/sub directory on disk, got err: %v", err)
+	}
+
+	// 3. Reject path traversal with 403
+	req3 := httptest.NewRequest(http.MethodPost, "/api/directories?path=../../escaped", nil)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for directory traversal, got %d", rec3.Code)
+	}
+
+	// 4. Reject empty path with 400
+	req4 := httptest.NewRequest(http.MethodPost, "/api/directories", nil)
+	rec4 := httptest.NewRecorder()
+	handler.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty path, got %d", rec4.Code)
+	}
+}
+
+func TestServer_CreateFileInSubdirectoryAPI(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. Create file in subdirectory
+	texContent := "\\section{Sub}\\input{test}"
+	writeReq := httptest.NewRequest(http.MethodPost, "/api/files/content?path=module5/chapter1.tex", bytes.NewBufferString(texContent))
+	writeRec := httptest.NewRecorder()
+	handler.ServeHTTP(writeRec, writeReq)
+	if writeRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 writing file in subdirectory, got %d: %s", writeRec.Code, writeRec.Body.String())
+	}
+
+	// 2. Read back
+	readReq := httptest.NewRequest(http.MethodGet, "/api/files/content?path=module5/chapter1.tex", nil)
+	readRec := httptest.NewRecorder()
+	handler.ServeHTTP(readRec, readReq)
+	if readRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 reading file in subdirectory, got %d", readRec.Code)
+	}
+	if readRec.Body.String() != texContent {
+		t.Errorf("unexpected content: got %q, want %q", readRec.Body.String(), texContent)
+	}
+
+	// 3. Verify in ListFiles
+	listReq := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	listRec := httptest.NewRecorder()
+	handler.ServeHTTP(listRec, listReq)
+	var files []workspace.FileInfo
+	_ = json.Unmarshal(listRec.Body.Bytes(), &files)
+
+	foundDir := false
+	foundFile := false
+	for _, f := range files {
+		if f.Path == "module5" && f.IsDir {
+			foundDir = true
+		}
+		if f.Path == "module5/chapter1.tex" && !f.IsDir {
+			foundFile = true
+		}
+	}
+	if !foundDir {
+		t.Errorf("expected module5 directory in ListFiles")
+	}
+	if !foundFile {
+		t.Errorf("expected module5/chapter1.tex in ListFiles")
+	}
+}
+
+
 

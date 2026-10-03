@@ -52,6 +52,7 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/files/content", s.handleFileContent)
+	mux.HandleFunc("/api/directories", s.handleDirectories)
 	mux.HandleFunc("/api/compile", s.handleCompile)
 	mux.HandleFunc("/api/pdf", s.handlePdf)
 	mux.HandleFunc("/api/events", s.handleEvents)
@@ -190,6 +191,43 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+type directoryPayload struct {
+	Path string `json:"path"`
+}
+
+func (s *Server) handleDirectories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	path := r.URL.Query().Get("path")
+	if path == "" && r.Body != nil {
+		var req directoryPayload
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		path = req.Path
+	}
+
+	path = strings.TrimSpace(path)
+	if path == "" {
+		http.Error(w, "missing path parameter", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.ws.CreateDirectory(path); err != nil {
+		if errors.Is(err, workspace.ErrPathTraversal) {
+			http.Error(w, "access denied: invalid directory path", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed to create directory: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
 }
 
 type compilePayload struct {
