@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"latex-editor/internal/compiler"
 	"latex-editor/internal/synctex"
@@ -22,6 +24,7 @@ type Server struct {
 	engine  compiler.Engine
 	synctex *synctex.SyncTex
 
+	compileMu  sync.Mutex // Serializes compilation jobs per workspace (REL-01)
 	mu         sync.RWMutex
 	lastResult *compiler.CompileResult
 	clients    map[chan string]struct{}
@@ -64,9 +67,18 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// Restrict CORS to local/loopback origins only (SEC-02)
+			if strings.HasPrefix(origin, "http://localhost:") ||
+				strings.HasPrefix(origin, "http://127.0.0.1:") ||
+				origin == "http://localhost" ||
+				origin == "http://127.0.0.1" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			}
+		}
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -153,8 +165,15 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(data)
 
 	case http.MethodPost:
+		// Limit file writes to 20MB (REL-02)
+		r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				http.Error(w, "request payload too large (max 20MB)", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "failed to read body", http.StatusBadRequest)
 			return
 		}
@@ -183,14 +202,51 @@ func (s *Server) handleCompile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit compile payload to 1MB (REL-02)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var reqBody compilePayload
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		dec := json.NewDecoder(r.Body)
+		if err := dec.Decode(&reqBody); err != nil && !errors.Is(err, io.EOF) {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				http.Error(w, "request payload too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			// Reject malformed JSON explicitly (REL-03)
+			http.Error(w, fmt.Sprintf("invalid json payload: %v", err), http.StatusBadRequest)
+			return
+		}
 	}
-	if reqBody.MainFile == "" {
+
+	// Validate main file input path (SEC-05)
+	if reqBody.MainFile != "" {
+		if !strings.HasSuffix(strings.ToLower(reqBody.MainFile), ".tex") {
+			http.Error(w, "main file must have .tex extension", http.StatusBadRequest)
+			return
+		}
+		safePath, err := s.ws.SafePath(reqBody.MainFile)
+		if err != nil {
+			http.Error(w, "access denied: invalid main file path", http.StatusForbidden)
+			return
+		}
+		fi, err := os.Stat(safePath)
+		if err != nil || fi.IsDir() {
+			http.Error(w, "main file not found", http.StatusNotFound)
+			return
+		}
+		rel, err := filepath.Rel(s.ws.RootDir(), safePath)
+		if err != nil {
+			http.Error(w, "invalid path resolution", http.StatusInternalServerError)
+			return
+		}
+		reqBody.MainFile = rel
+	} else {
+		// Discover first .tex file or fall back to main.tex
 		if files, err := s.ws.ListFiles(); err == nil {
 			for _, f := range files {
-				if !f.IsDir && strings.HasSuffix(f.Name, ".tex") {
+				if !f.IsDir && strings.HasSuffix(strings.ToLower(f.Name), ".tex") {
 					reqBody.MainFile = f.Path
 					break
 				}
@@ -201,9 +257,17 @@ func (s *Server) handleCompile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Serialize compiles per workspace to protect .latex-cache (REL-01)
+	s.compileMu.Lock()
+	defer s.compileMu.Unlock()
+
+	// Apply server-side compile timeout (REL-01)
+	compileCtx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+
 	s.BroadcastEvent("compile_start", fmt.Sprintf(`{"main_file":%q}`, reqBody.MainFile))
 
-	res, err := s.engine.Compile(r.Context(), compiler.CompileRequest{
+	res, err := s.engine.Compile(compileCtx, compiler.CompileRequest{
 		RootDir:  s.ws.RootDir(),
 		MainFile: reqBody.MainFile,
 	})
@@ -238,23 +302,38 @@ func (s *Server) handlePdf(w http.ResponseWriter, r *http.Request) {
 	var pdfPath string
 
 	if requestedFile != "" {
-		// Look in cache directory
-		cacheCandidate := filepath.Join(s.ws.RootDir(), ".latex-cache", filepath.Base(requestedFile))
-		if _, err := os.Stat(cacheCandidate); err == nil {
+		// Only allow PDF files (SEC-01)
+		if !strings.HasSuffix(strings.ToLower(requestedFile), ".pdf") {
+			http.Error(w, "only PDF files may be requested", http.StatusBadRequest)
+			return
+		}
+
+		// 1. Look in cache directory by base name only (immune to path traversal)
+		cleanBase := filepath.Base(requestedFile)
+		cacheCandidate := filepath.Join(s.ws.RootDir(), ".latex-cache", cleanBase)
+		if fi, err := os.Stat(cacheCandidate); err == nil && !fi.IsDir() {
 			pdfPath = cacheCandidate
 		} else {
-			// Look in root directory
-			rootCandidate := filepath.Join(s.ws.RootDir(), filepath.Clean(requestedFile))
-			if _, err := os.Stat(rootCandidate); err == nil {
-				pdfPath = rootCandidate
+			// 2. Resolve through SafePath to ensure containment inside workspace
+			safePath, err := s.ws.SafePath(requestedFile)
+			if err != nil {
+				http.Error(w, "access denied", http.StatusForbidden)
+				return
+			}
+			if fi, err := os.Stat(safePath); err == nil && !fi.IsDir() {
+				pdfPath = safePath
 			}
 		}
 	}
 
 	if pdfPath == "" {
 		if res != nil && res.PdfFile != "" {
-			if _, err := os.Stat(res.PdfFile); err == nil {
-				pdfPath = res.PdfFile
+			if fi, err := os.Stat(res.PdfFile); err == nil && !fi.IsDir() {
+				canonPdf, _ := filepath.EvalSymlinks(res.PdfFile)
+				relW, errW := filepath.Rel(s.ws.CanonicalRootDir(), canonPdf)
+				if errW == nil && !strings.HasPrefix(relW, "..") {
+					pdfPath = res.PdfFile
+				}
 			}
 		}
 	}
@@ -264,7 +343,7 @@ func (s *Server) handlePdf(w http.ResponseWriter, r *http.Request) {
 		cacheDir := filepath.Join(s.ws.RootDir(), ".latex-cache")
 		if entries, err := os.ReadDir(cacheDir); err == nil {
 			for _, e := range entries {
-				if !e.IsDir() && strings.HasSuffix(e.Name(), ".pdf") {
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".pdf") {
 					pdfPath = filepath.Join(cacheDir, e.Name())
 					break
 				}
@@ -276,9 +355,13 @@ func (s *Server) handlePdf(w http.ResponseWriter, r *http.Request) {
 		// Fallback: look for any .pdf in workspace root
 		if entries, err := os.ReadDir(s.ws.RootDir()); err == nil {
 			for _, e := range entries {
-				if !e.IsDir() && strings.HasSuffix(e.Name(), ".pdf") {
-					pdfPath = filepath.Join(s.ws.RootDir(), e.Name())
-					break
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".pdf") {
+					pdfCandidate := filepath.Join(s.ws.RootDir(), e.Name())
+					safePath, err := s.ws.SafePath(e.Name())
+					if err == nil && safePath == pdfCandidate {
+						pdfPath = pdfCandidate
+						break
+					}
 				}
 			}
 		}
@@ -345,6 +428,8 @@ func (s *Server) handleSyncTexForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	var q synctex.ForwardQuery
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -391,6 +476,8 @@ func (s *Server) handleSyncTexInverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var q synctex.InverseQuery
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {

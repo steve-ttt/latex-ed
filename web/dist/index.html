@@ -24,7 +24,7 @@
 
     <div class="main-container">
       <!-- File Tree Sidebar -->
-      <aside>
+      <aside id="sidebar">
         <div class="aside-header">
           <span>PROJECT FILES</span>
           <button id="btnNewFile" style="padding: 2px 6px;" title="New File">+</button>
@@ -32,8 +32,11 @@
         <div class="file-tree-container" id="fileTree"></div>
       </aside>
 
+      <!-- Resize handle: Sidebar / Editor -->
+      <div class="resizer" id="resizerSidebar" title="Drag to resize Project Files (Double-click to reset)"></div>
+
       <!-- Center Code Editor -->
-      <section class="editor-section">
+      <section class="editor-section" id="editorSection">
         <div class="editor-header">
           <span id="editorStatus">Ready</span>
           <div style="display: flex; align-items: center; gap: 6px;">
@@ -113,8 +116,11 @@
         </div>
       </section>
 
+      <!-- Resize handle: Editor / PDF Viewer -->
+      <div class="resizer" id="resizerViewer" title="Drag to resize Editor and PDF preview (Double-click to reset)"></div>
+
       <!-- Right PDF Viewer -->
-      <section class="viewer-section">
+      <section class="viewer-section" id="viewerSection">
         <div class="viewer-header">
           <span>PDF Preview</span>
           <div>

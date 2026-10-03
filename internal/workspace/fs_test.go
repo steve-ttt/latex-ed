@@ -149,3 +149,53 @@ func TestWorkspace_DeleteFile(t *testing.T) {
 		t.Errorf("expected error reading deleted file, got nil")
 	}
 }
+
+func TestWorkspace_SafePath_SymlinkEscape(t *testing.T) {
+	tmpDir := t.TempDir()
+	outsideDir := t.TempDir()
+
+	ws, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	secretFile := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(secretFile, []byte("super secret data"), 0644); err != nil {
+		t.Fatalf("failed to create secret file: %v", err)
+	}
+
+	// 1. Directory symlink pointing outside workspace
+	symlinkDir := filepath.Join(tmpDir, "external_link")
+	if err := os.Symlink(outsideDir, symlinkDir); err != nil {
+		t.Fatalf("failed to create directory symlink: %v", err)
+	}
+
+	// SafePath on file within outside symlink must be blocked
+	if _, err := ws.SafePath("external_link/secret.txt"); err == nil {
+		t.Errorf("expected SafePath on outside symlink directory to fail with ErrPathTraversal, got nil")
+	}
+
+	// ReadFile through outside symlink must fail
+	if _, err := ws.ReadFile("external_link/secret.txt"); err == nil {
+		t.Errorf("expected ReadFile through outside symlink to fail, got nil")
+	}
+
+	// WriteFile through outside symlink must fail
+	if err := ws.WriteFile("external_link/new_hacked.txt", []byte("bad")); err == nil {
+		t.Errorf("expected WriteFile through outside symlink to fail, got nil")
+	}
+
+	// 2. Direct file symlink pointing outside workspace
+	symlinkFile := filepath.Join(tmpDir, "symlink_secret.txt")
+	if err := os.Symlink(secretFile, symlinkFile); err != nil {
+		t.Fatalf("failed to create file symlink: %v", err)
+	}
+
+	if _, err := ws.SafePath("symlink_secret.txt"); err == nil {
+		t.Errorf("expected SafePath on direct outside file symlink to fail, got nil")
+	}
+	if _, err := ws.ReadFile("symlink_secret.txt"); err == nil {
+		t.Errorf("expected ReadFile on direct outside file symlink to fail, got nil")
+	}
+}
+

@@ -118,7 +118,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 aside {
   width: 220px;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -186,8 +185,7 @@ aside {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border);
-  min-width: 320px;
+  min-width: 200px;
 }
 
 .editor-header {
@@ -567,6 +565,52 @@ aside {
 .diag-msg { color: var(--text-bright); flex: 1; }
 
 /* ------------------------------------------------------------------------------
+   Pane Resizers (Splitters)
+   ------------------------------------------------------------------------------ */
+.resizer {
+  width: 5px;
+  background: var(--bg-darker);
+  border-left: 1px solid var(--border);
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+  user-select: none;
+  z-index: 20;
+  transition: background-color 0.15s ease, border-left-color 0.15s ease;
+}
+
+.resizer:hover,
+.resizer.resizing {
+  background: var(--accent);
+  border-left-color: var(--accent);
+}
+
+/* Wider invisible hit area for easy mouse grabbing */
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+  z-index: 25;
+}
+
+/* Global state while dragging resizer */
+body.is-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-resizing * {
+  user-select: none !important;
+}
+
+body.is-resizing iframe {
+  pointer-events: none !important;
+}
+
+/* ------------------------------------------------------------------------------
    Right PDF Viewer Section
    ------------------------------------------------------------------------------ */
 .viewer-section {
@@ -574,7 +618,7 @@ aside {
   display: flex;
   flex-direction: column;
   background: #2b2b2b;
-  min-width: 320px;
+  min-width: 200px;
 }
 
 .viewer-header {

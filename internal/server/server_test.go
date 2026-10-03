@@ -252,3 +252,120 @@ SyncTex line 4
 		t.Fatalf("inverse synctex failed: %d - %s", invRec.Code, invRec.Body.String())
 	}
 }
+
+func TestServer_Pdf_Security(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. Non-pdf extension rejected
+	req1 := httptest.NewRequest(http.MethodGet, "/api/pdf?file=../../etc/passwd", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-pdf file, got %d", rec1.Code)
+	}
+
+	// 2. Traversal with .pdf extension rejected
+	req2 := httptest.NewRequest(http.MethodGet, "/api/pdf?file=../../etc/secret.pdf", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for path traversal, got %d", rec2.Code)
+	}
+
+	// 3. Missing pdf returns 404
+	req3 := httptest.NewRequest(http.MethodGet, "/api/pdf?file=nonexistent.pdf", nil)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for missing pdf, got %d", rec3.Code)
+	}
+}
+
+func TestServer_Compile_Validation(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. Malformed JSON rejected with 400
+	req1 := httptest.NewRequest(http.MethodPost, "/api/compile", bytes.NewBufferString(`{invalid-json`))
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for malformed compile JSON, got %d", rec1.Code)
+	}
+
+	// 2. Non-tex file rejected with 400
+	req2 := httptest.NewRequest(http.MethodPost, "/api/compile", bytes.NewBufferString(`{"main_file":"script.sh"}`))
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-tex main file, got %d", rec2.Code)
+	}
+
+	// 3. Out-of-workspace traversal rejected with 403
+	req3 := httptest.NewRequest(http.MethodPost, "/api/compile", bytes.NewBufferString(`{"main_file":"../../evil.tex"}`))
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for traversal main file, got %d", rec3.Code)
+	}
+
+	// 4. Missing tex file returns 404
+	req4 := httptest.NewRequest(http.MethodPost, "/api/compile", bytes.NewBufferString(`{"main_file":"missing.tex"}`))
+	rec4 := httptest.NewRecorder()
+	handler.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent main file, got %d", rec4.Code)
+	}
+}
+
+func TestServer_PayloadLimit(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	handler := srv.Routes()
+
+	// Create oversized payload (> 20MB)
+	oversized := make([]byte, 21<<20)
+	req := httptest.NewRequest(http.MethodPost, "/api/files/content?path=huge.tex", bytes.NewReader(oversized))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413 for oversized file upload, got %d", rec.Code)
+	}
+}
+
+func TestServer_CORS_Policy(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	handler := srv.Routes()
+
+	// 1. External untrusted origin should not receive CORS headers
+	reqExternal := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	reqExternal.Header.Set("Origin", "http://evil-site.com")
+	recExternal := httptest.NewRecorder()
+	handler.ServeHTTP(recExternal, reqExternal)
+
+	if allowOrigin := recExternal.Header().Get("Access-Control-Allow-Origin"); allowOrigin != "" {
+		t.Errorf("expected no Access-Control-Allow-Origin for untrusted origin, got %q", allowOrigin)
+	}
+
+	// 2. Localhost origin should be allowed
+	reqLocal := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	reqLocal.Header.Set("Origin", "http://localhost:3000")
+	recLocal := httptest.NewRecorder()
+	handler.ServeHTTP(recLocal, reqLocal)
+
+	if allowOrigin := recLocal.Header().Get("Access-Control-Allow-Origin"); allowOrigin != "http://localhost:3000" {
+		t.Errorf("expected Access-Control-Allow-Origin: http://localhost:3000, got %q", allowOrigin)
+	}
+
+	// 3. 127.0.0.1 origin should be allowed
+	reqLoopback := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	reqLoopback.Header.Set("Origin", "http://127.0.0.1:8080")
+	recLoopback := httptest.NewRecorder()
+	handler.ServeHTTP(recLoopback, reqLoopback)
+
+	if allowOrigin := recLoopback.Header().Get("Access-Control-Allow-Origin"); allowOrigin != "http://127.0.0.1:8080" {
+		t.Errorf("expected Access-Control-Allow-Origin: http://127.0.0.1:8080, got %q", allowOrigin)
+	}
+}
+

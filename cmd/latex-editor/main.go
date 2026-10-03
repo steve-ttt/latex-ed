@@ -20,6 +20,7 @@ import (
 
 func main() {
 	port := flag.Int("port", 8081, "Port for the LaTeX editor web service")
+	host := flag.String("host", "127.0.0.1", "Host address to bind to (default 127.0.0.1 for local security)")
 	dir := flag.String("dir", ".", "Working directory containing LaTeX files")
 	engineFlag := flag.String("engine", "pdflatex", "LaTeX engine binary (e.g. pdflatex, xelatex, lualatex)")
 	openBrowser := flag.Bool("open", false, "Automatically open web browser on startup")
@@ -41,10 +42,12 @@ func main() {
 		srv.SetWebHandler(server.NewSPAHandler(assetsFS))
 	}
 
-	addr := fmt.Sprintf(":%d", *port)
+	addr := fmt.Sprintf("%s:%d", *host, *port)
 	httpServer := &http.Server{
-		Addr:    addr,
-		Handler: srv.Routes(),
+		Addr:              addr,
+		Handler:           srv.Routes(),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Graceful shutdown channel
@@ -53,14 +56,17 @@ func main() {
 
 	go func() {
 		fmt.Printf("\n==================================================\n")
-		fmt.Printf("  LaTeX Editor running at: http://localhost:%d\n", *port)
+		fmt.Printf("  LaTeX Editor running at: http://%s:%d\n", *host, *port)
 		fmt.Printf("  Serving directory: %s\n", ws.RootDir())
+		if *host != "127.0.0.1" && *host != "localhost" {
+			fmt.Printf("  WARNING: Listening on non-loopback interface (%s)\n", *host)
+		}
 		fmt.Printf("==================================================\n\n")
 
 		if *openBrowser {
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				_ = exec.Command("xdg-open", fmt.Sprintf("http://localhost:%d", *port)).Start()
+				_ = exec.Command("xdg-open", fmt.Sprintf("http://%s:%d", *host, *port)).Start()
 			}()
 		}
 

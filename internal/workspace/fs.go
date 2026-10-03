@@ -23,7 +23,8 @@ type FileInfo struct {
 
 // Workspace manages file operations within a bounded directory.
 type Workspace struct {
-	rootDir string
+	rootDir       string
+	canonicalRoot string
 }
 
 // New creates and validates a Workspace at rootDir.
@@ -41,7 +42,12 @@ func New(rootDir string) (*Workspace, error) {
 		return nil, fmt.Errorf("workspace path is not a directory: %s", absRoot)
 	}
 
-	return &Workspace{rootDir: absRoot}, nil
+	canonicalRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		canonicalRoot = absRoot
+	}
+
+	return &Workspace{rootDir: absRoot, canonicalRoot: canonicalRoot}, nil
 }
 
 // RootDir returns the absolute root directory path.
@@ -49,7 +55,13 @@ func (w *Workspace) RootDir() string {
 	return w.rootDir
 }
 
+// CanonicalRootDir returns the resolved symlink-free root directory path.
+func (w *Workspace) CanonicalRootDir() string {
+	return w.canonicalRoot
+}
+
 // SafePath checks if relPath is safely within the workspace root, returning the absolute path.
+// It guards against lexical traversal (..) and verifies symlink containment.
 func (w *Workspace) SafePath(relPath string) (string, error) {
 	if strings.ContainsRune(relPath, 0) {
 		return "", ErrPathTraversal
@@ -70,10 +82,44 @@ func (w *Workspace) SafePath(relPath string) (string, error) {
 
 	fullPath := filepath.Join(w.rootDir, cleaned)
 
-	// Verify relative path from rootDir does not escape
+	// Verify relative path from rootDir does not escape lexically
 	rel, err := filepath.Rel(w.rootDir, fullPath)
 	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
 		return "", ErrPathTraversal
+	}
+
+	// Canonical symlink containment verification
+	if _, err := os.Lstat(fullPath); err == nil {
+		// Target exists: resolve full canonical path
+		canonicalTarget, err := filepath.EvalSymlinks(fullPath)
+		if err != nil {
+			return "", ErrPathTraversal
+		}
+		relCanonical, err := filepath.Rel(w.canonicalRoot, canonicalTarget)
+		if err != nil || strings.HasPrefix(relCanonical, "..") || relCanonical == ".." {
+			return "", ErrPathTraversal
+		}
+	} else if os.IsNotExist(err) {
+		// Target does not exist yet: verify nearest existing parent directory remains in workspace
+		parent := filepath.Dir(fullPath)
+		for {
+			if _, pErr := os.Stat(parent); pErr == nil {
+				canonicalParent, cErr := filepath.EvalSymlinks(parent)
+				if cErr != nil {
+					return "", ErrPathTraversal
+				}
+				relCanonical, relErr := filepath.Rel(w.canonicalRoot, canonicalParent)
+				if relErr != nil || strings.HasPrefix(relCanonical, "..") || relCanonical == ".." {
+					return "", ErrPathTraversal
+				}
+				break
+			}
+			nextParent := filepath.Dir(parent)
+			if nextParent == parent || nextParent == "." || nextParent == "/" {
+				break
+			}
+			parent = nextParent
+		}
 	}
 
 	return fullPath, nil
@@ -104,11 +150,28 @@ func (w *Workspace) WriteFile(relPath string, data []byte) error {
 }
 
 // DeleteFile removes a file or directory within the workspace.
+// If the target is a symlink, it removes the link without traversing it.
 func (w *Workspace) DeleteFile(relPath string) error {
 	target, err := w.SafePath(relPath)
 	if err != nil {
 		return err
 	}
+	if target == w.rootDir || target == w.canonicalRoot {
+		return ErrPathTraversal
+	}
+
+	fi, err := os.Lstat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(target)
+	}
+
 	return os.RemoveAll(target)
 }
 

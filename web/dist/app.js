@@ -74,7 +74,9 @@
     return str
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ----------------------------------------------------------------------------
@@ -697,7 +699,7 @@
       row.className = 'tree-row' + (item.path === currentFile ? ' active' : '');
 
       if (item.isDir) {
-        const isExpanded = folderState[item.path] !== false;
+        const isExpanded = folderState[item.path] === true;
         row.innerHTML = `
           <span class="tree-arrow ${isExpanded ? '' : 'collapsed'}">▼</span>
           <span class="tree-icon">${isExpanded ? '📂' : '📁'}</span>
@@ -767,11 +769,22 @@
     }
   }
 
+  function expandParents(filePath) {
+    if (!filePath) return;
+    const parts = filePath.split('/');
+    let cur = '';
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur = cur ? `${cur}/${parts[i]}` : parts[i];
+      folderState[cur] = true;
+    }
+  }
+
   async function selectFile(path) {
     if (currentFile && currentFile !== path && codeEditor.value) {
       await saveFile();
     }
     currentFile = path;
+    expandParents(path);
     headerFile.textContent = '• ' + currentFile;
     renderFileTree();
     await loadFileContent(currentFile);
@@ -897,23 +910,40 @@ Welcome to your local \\LaTeX{} web editor!
   }
 
   function renderDiagnostics(items) {
+    logBody.innerHTML = '';
     if (items.length === 0) {
-      logBody.innerHTML = '<div style="color: var(--text-muted); font-style: italic;">No compilation errors or warnings.</div>';
+      const emptyEl = document.createElement('div');
+      emptyEl.style.color = 'var(--text-muted)';
+      emptyEl.style.fontStyle = 'italic';
+      emptyEl.textContent = 'No compilation errors or warnings.';
+      logBody.appendChild(emptyEl);
       return;
     }
 
-    logBody.innerHTML = items.map(d => {
+    items.forEach(d => {
       const fileLabel = d.file ? d.file.split('/').pop() : '';
       const lineLabel = d.line > 0 ? `L${d.line}` : '';
       const loc = [fileLabel, lineLabel].filter(Boolean).join(':');
 
-      return `
-        <div class="diag-item ${d.severity}" onclick="jumpToDiagnostic('${escapeHtml(d.file || '')}', ${d.line})">
-          <span class="diag-line">${loc ? `[${escapeHtml(loc)}]` : ''}</span>
-          <span class="diag-msg">${escapeHtml(d.message)}</span>
-        </div>
-      `;
-    }).join('');
+      const itemEl = document.createElement('div');
+      itemEl.className = `diag-item ${d.severity || ''}`;
+      itemEl.onclick = () => jumpToDiagnostic(d.file || '', d.line || 0);
+
+      if (loc) {
+        const lineSpan = document.createElement('span');
+        lineSpan.className = 'diag-line';
+        lineSpan.textContent = `[${loc}]`;
+        itemEl.appendChild(lineSpan);
+        itemEl.appendChild(document.createTextNode(' '));
+      }
+
+      const msgSpan = document.createElement('span');
+      msgSpan.className = 'diag-msg';
+      msgSpan.textContent = d.message || '';
+      itemEl.appendChild(msgSpan);
+
+      logBody.appendChild(itemEl);
+    });
   }
 
   window.jumpToDiagnostic = async function(file, line) {
@@ -1163,7 +1193,148 @@ Welcome to your local \\LaTeX{} web editor!
   });
 
   // ----------------------------------------------------------------------------
-  // 12. Application Startup
+  // 12. Dynamic Pane Resizers
+  // ----------------------------------------------------------------------------
+  const mainContainer = document.querySelector('.main-container');
+  const sidebar = document.querySelector('aside');
+  const editorSection = document.querySelector('.editor-section');
+  const viewerSection = document.querySelector('.viewer-section');
+  const resizerSidebar = document.getElementById('resizerSidebar');
+  const resizerViewer = document.getElementById('resizerViewer');
+
+  // Restore saved layout preferences
+  try {
+    const savedSidebarWidth = localStorage.getItem('latex_sidebar_width');
+    if (savedSidebarWidth && sidebar) {
+      const w = parseInt(savedSidebarWidth, 10);
+      if (w >= 140 && w <= 700) {
+        sidebar.style.width = w + 'px';
+      }
+    }
+
+    const savedSplitRatio = localStorage.getItem('latex_split_ratio');
+    if (savedSplitRatio && editorSection && viewerSection) {
+      const ratio = parseFloat(savedSplitRatio);
+      if (ratio >= 15 && ratio <= 85) {
+        editorSection.style.flex = `${ratio} 1 0px`;
+        viewerSection.style.flex = `${100 - ratio} 1 0px`;
+      }
+    }
+  } catch (e) {}
+
+  // Sidebar Resizer Handle
+  if (resizerSidebar && sidebar && mainContainer) {
+    resizerSidebar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = sidebar.getBoundingClientRect().width;
+
+      document.body.classList.add('is-resizing');
+      resizerSidebar.classList.add('resizing');
+
+      function onPointerMove(moveEvent) {
+        const deltaX = moveEvent.clientX - startX;
+        let newWidth = startWidth + deltaX;
+        const maxWidth = Math.min(600, mainContainer.clientWidth - 420);
+        if (newWidth < 140) newWidth = 140;
+        if (newWidth > maxWidth) newWidth = maxWidth;
+
+        sidebar.style.width = newWidth + 'px';
+        updateLineNumbers();
+      }
+
+      function onPointerUp() {
+        document.body.classList.remove('is-resizing');
+        resizerSidebar.classList.remove('resizing');
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        try {
+          localStorage.setItem('latex_sidebar_width', sidebar.offsetWidth.toString());
+        } catch (err) {}
+        updateLineNumbers();
+      }
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    });
+
+    // Double-click to reset sidebar width to default (220px)
+    resizerSidebar.addEventListener('dblclick', () => {
+      sidebar.style.width = '220px';
+      try {
+        localStorage.setItem('latex_sidebar_width', '220');
+      } catch (err) {}
+      updateLineNumbers();
+    });
+  }
+
+  // Editor / PDF Viewer Resizer Handle
+  if (resizerViewer && editorSection && viewerSection && mainContainer) {
+    resizerViewer.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const editorRect = editorSection.getBoundingClientRect();
+      const startEditorWidth = editorRect.width;
+
+      document.body.classList.add('is-resizing');
+      resizerViewer.classList.add('resizing');
+
+      function onPointerMove(moveEvent) {
+        const deltaX = moveEvent.clientX - startX;
+        let newEditorWidth = startEditorWidth + deltaX;
+        const resizersWidth = (resizerSidebar ? resizerSidebar.offsetWidth : 5) + resizerViewer.offsetWidth;
+        const availWidth = mainContainer.clientWidth - sidebar.offsetWidth - resizersWidth;
+
+        const minEditor = 200;
+        const minViewer = 200;
+        if (availWidth < (minEditor + minViewer)) return;
+
+        if (newEditorWidth < minEditor) newEditorWidth = minEditor;
+        if (newEditorWidth > availWidth - minViewer) newEditorWidth = availWidth - minViewer;
+
+        const ratio = (newEditorWidth / availWidth) * 100;
+        editorSection.style.flex = `${ratio} 1 0px`;
+        viewerSection.style.flex = `${100 - ratio} 1 0px`;
+        updateLineNumbers();
+      }
+
+      function onPointerUp() {
+        document.body.classList.remove('is-resizing');
+        resizerViewer.classList.remove('resizing');
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+
+        const curFlex = parseFloat(editorSection.style.flex);
+        if (!isNaN(curFlex)) {
+          try {
+            localStorage.setItem('latex_split_ratio', curFlex.toFixed(2));
+          } catch (err) {}
+        }
+        updateLineNumbers();
+      }
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    });
+
+    // Double-click to reset editor/viewer split to 50/50
+    resizerViewer.addEventListener('dblclick', () => {
+      editorSection.style.flex = '50 1 0px';
+      viewerSection.style.flex = '50 1 0px';
+      try {
+        localStorage.setItem('latex_split_ratio', '50');
+      } catch (err) {}
+      updateLineNumbers();
+    });
+  }
+
+  // Adjust word-wrapped line heights on window resize
+  window.addEventListener('resize', () => {
+    updateLineNumbers();
+  });
+
+  // ----------------------------------------------------------------------------
+  // 13. Application Startup
   // ----------------------------------------------------------------------------
   loadFiles().then(() => {
     if (currentFile) {
