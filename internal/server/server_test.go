@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"latex-editor/internal/compiler"
+	"latex-editor/internal/templates"
 	"latex-editor/internal/workspace"
 )
 
@@ -528,6 +529,127 @@ func TestServer_CreateFileInSubdirectoryAPI(t *testing.T) {
 	}
 	if !foundFile {
 		t.Errorf("expected module5/chapter1.tex in ListFiles")
+	}
+}
+
+func TestServer_TemplateAPI(t *testing.T) {
+	wsDir := t.TempDir()
+	ws, err := workspace.New(wsDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	srv := New(ws, &mockEngine{})
+	emptyTplDir := t.TempDir()
+	srv.SetTemplateResolver(templates.NewResolver(emptyTplDir))
+	handler := srv.Routes()
+
+	// 1. GET /api/template without path (defaults to LaTeX template)
+	req1 := httptest.NewRequest(http.MethodGet, "/api/template", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec1.Code)
+	}
+	if rec1.Body.String() != templates.BuiltinHowToTemplate {
+		t.Errorf("expected BuiltinHowToTemplate for /api/template")
+	}
+
+	// 2. GET /api/template?path=notes.tex
+	req2 := httptest.NewRequest(http.MethodGet, "/api/template?path=notes.tex", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec2.Code)
+	}
+	if rec2.Body.String() != templates.BuiltinHowToTemplate {
+		t.Errorf("expected BuiltinHowToTemplate for /api/template?path=notes.tex")
+	}
+
+	// 3. GET /api/template?path=references.bib (non-tex file returns empty)
+	req3 := httptest.NewRequest(http.MethodGet, "/api/template?path=references.bib", nil)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec3.Code)
+	}
+	if rec3.Body.String() != "" {
+		t.Errorf("expected empty string for non-tex file, got %q", rec3.Body.String())
+	}
+}
+
+func TestServer_CreateFileWithTemplate(t *testing.T) {
+	wsDir := t.TempDir()
+	ws, err := workspace.New(wsDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	srv := New(ws, &mockEngine{})
+	emptyTplDir := t.TempDir()
+	srv.SetTemplateResolver(templates.NewResolver(emptyTplDir))
+	handler := srv.Routes()
+
+	// Create file with template=true and empty body
+	req := httptest.NewRequest(http.MethodPost, "/api/files/content?path=intro.tex&template=true", bytes.NewReader(nil))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	data, err := ws.ReadFile("intro.tex")
+	if err != nil {
+		t.Fatalf("failed to read created file: %v", err)
+	}
+	if string(data) != templates.BuiltinHowToTemplate {
+		t.Errorf("expected intro.tex to contain built-in template")
+	}
+}
+
+func TestServer_CreateFileWithCustomTemplate(t *testing.T) {
+	wsDir := t.TempDir()
+	ws, err := workspace.New(wsDir)
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	customDir := t.TempDir()
+	customTemplate := "\\documentclass{article}\n% Custom User Paper\n\\begin{document}\nWelcome\n\\end{document}\n"
+	err = os.WriteFile(filepath.Join(customDir, "default.tex"), []byte(customTemplate), 0644)
+	if err != nil {
+		t.Fatalf("failed to write custom default.tex: %v", err)
+	}
+
+	srv := New(ws, &mockEngine{})
+	srv.SetTemplateResolver(templates.NewResolver(customDir))
+	handler := srv.Routes()
+
+	// 1. Check GET /api/template returns custom template
+	tplReq := httptest.NewRequest(http.MethodGet, "/api/template?path=paper.tex", nil)
+	tplRec := httptest.NewRecorder()
+	handler.ServeHTTP(tplRec, tplReq)
+	if tplRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", tplRec.Code)
+	}
+	if tplRec.Body.String() != customTemplate {
+		t.Errorf("expected custom template, got %q", tplRec.Body.String())
+	}
+
+	// 2. Create file with template=true and empty body
+	req := httptest.NewRequest(http.MethodPost, "/api/files/content?path=paper.tex&template=true", bytes.NewReader(nil))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	data, err := ws.ReadFile("paper.tex")
+	if err != nil {
+		t.Fatalf("failed to read created file: %v", err)
+	}
+	if string(data) != customTemplate {
+		t.Errorf("expected paper.tex to contain custom template, got %q", string(data))
 	}
 }
 

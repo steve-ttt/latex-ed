@@ -250,7 +250,16 @@ Edit your document on the left, and see real-time PDF output on the right.
             setCurrentFile(f);
           }}
           onCreateFile={async (name) => {
-            await saveContent(name, '');
+            let initial = '';
+            if (name.endsWith('.tex') || !name.includes('.')) {
+              try {
+                const tplRes = await fetch(`/api/template?path=${encodeURIComponent(name)}`);
+                if (tplRes.ok) {
+                  initial = await tplRes.text();
+                }
+              } catch (_) {}
+            }
+            await saveContent(name, initial);
             await loadFiles();
             setCurrentFile(name);
           }}

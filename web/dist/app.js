@@ -868,10 +868,24 @@ Welcome to your local \\LaTeX{} web editor!
       name += '.tex';
     }
     const fullPath = `${dirPath}/${name}`;
+    if (files.some(f => f.path === fullPath)) {
+      alert('A file or directory with that name already exists.');
+      await selectFile(fullPath);
+      return;
+    }
     try {
+      let initialContent = '% ' + name.split('/').pop() + '\n';
+      if (name.endsWith('.tex')) {
+        try {
+          const tplRes = await fetch('/api/template?path=' + encodeURIComponent(fullPath));
+          if (tplRes.ok) {
+            initialContent = await tplRes.text();
+          }
+        } catch (_) {}
+      }
       const res = await fetch('/api/files/content?path=' + encodeURIComponent(fullPath), {
         method: 'POST',
-        body: '% ' + name.split('/').pop() + '\n',
+        body: initialContent,
       });
       if (res.ok) {
         folderState[dirPath] = true;
@@ -1078,10 +1092,24 @@ Welcome to your local \\LaTeX{} web editor!
     if (!cleanName.includes('.')) {
       cleanName += '.tex';
     }
+    if (files.some(f => f.path === cleanName)) {
+      alert('A file or directory with that name already exists.');
+      await selectFile(cleanName);
+      return;
+    }
     try {
+      let initialContent = '% ' + cleanName.split('/').pop() + '\n';
+      if (cleanName.endsWith('.tex')) {
+        try {
+          const tplRes = await fetch('/api/template?path=' + encodeURIComponent(cleanName));
+          if (tplRes.ok) {
+            initialContent = await tplRes.text();
+          }
+        } catch (_) {}
+      }
       const res = await fetch('/api/files/content?path=' + encodeURIComponent(cleanName), {
         method: 'POST',
-        body: '% ' + cleanName.split('/').pop() + '\n',
+        body: initialContent,
       });
       if (res.ok) {
         expandParents(cleanName);

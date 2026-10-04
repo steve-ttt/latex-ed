@@ -15,14 +15,16 @@ import (
 
 	"latex-editor/internal/compiler"
 	"latex-editor/internal/synctex"
+	"latex-editor/internal/templates"
 	"latex-editor/internal/workspace"
 )
 
 // Server coordinates the HTTP REST API, SSE streaming, and compiler backend.
 type Server struct {
-	ws      *workspace.Workspace
-	engine  compiler.Engine
-	synctex *synctex.SyncTex
+	ws        *workspace.Workspace
+	engine    compiler.Engine
+	synctex   *synctex.SyncTex
+	templates *templates.Resolver
 
 	compileMu  sync.Mutex // Serializes compilation jobs per workspace (REL-01)
 	mu         sync.RWMutex
@@ -34,16 +36,22 @@ type Server struct {
 // New initializes a new Server.
 func New(ws *workspace.Workspace, engine compiler.Engine) *Server {
 	return &Server{
-		ws:      ws,
-		engine:  engine,
-		synctex: synctex.New(),
-		clients: make(map[chan string]struct{}),
+		ws:        ws,
+		engine:    engine,
+		synctex:   synctex.New(),
+		templates: templates.NewResolver(),
+		clients:   make(map[chan string]struct{}),
 	}
 }
 
 // SetWebHandler attaches a static or embedded web handler for SPA routing.
 func (s *Server) SetWebHandler(h http.Handler) {
 	s.webHandler = h
+}
+
+// SetTemplateResolver overrides the template resolver (e.g. for testing).
+func (s *Server) SetTemplateResolver(r *templates.Resolver) {
+	s.templates = r
 }
 
 // Routes constructs the HTTP multiplexer with all API routes.
@@ -53,6 +61,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/files/content", s.handleFileContent)
 	mux.HandleFunc("/api/directories", s.handleDirectories)
+	mux.HandleFunc("/api/template", s.handleTemplate)
 	mux.HandleFunc("/api/compile", s.handleCompile)
 	mux.HandleFunc("/api/pdf", s.handlePdf)
 	mux.HandleFunc("/api/events", s.handleEvents)
@@ -178,6 +187,12 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read body", http.StatusBadRequest)
 			return
 		}
+
+		useTemplate := r.URL.Query().Get("template")
+		if (useTemplate == "true" || useTemplate == "1") && len(body) == 0 && s.templates != nil {
+			body = []byte(s.templates.ResolveTemplate(path))
+		}
+
 		if err := s.ws.WriteFile(path, body); err != nil {
 			if errors.Is(err, workspace.ErrPathTraversal) {
 				http.Error(w, "access denied", http.StatusForbidden)
@@ -191,6 +206,25 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleTemplate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = r.URL.Query().Get("name")
+	}
+
+	var content string
+	if s.templates != nil {
+		content = s.templates.ResolveTemplate(path)
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(content))
 }
 
 type directoryPayload struct {
