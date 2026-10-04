@@ -191,3 +191,5 @@ make test
 This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
 
 Designed and crafted for private, local-first LaTeX writing.
+
+*Need a proprietary commercial license or custom integration without AGPL-3.0 copyleft obligations? Contact me via GitHub.*
