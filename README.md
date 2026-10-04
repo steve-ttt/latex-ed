@@ -94,6 +94,26 @@ Example serving a specific paper directory and opening your browser:
 
 ---
 
+## Releases
+
+Pushing a version tag matching `v*` creates a GitHub release with prebuilt standalone binaries for:
+
+- Linux x86_64
+- Linux arm64 (including 64-bit Raspberry Pi OS)
+- macOS Intel and Apple Silicon
+- Windows x86_64
+
+For example:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The **Release** workflow can also be run manually from the Actions tab by supplying a version tag.
+
+---
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
