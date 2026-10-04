@@ -188,4 +188,6 @@ make test
 
 ## License
 
-MIT License. Designed and crafted for private, local-first LaTeX writing.
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
+
+Designed and crafted for private, local-first LaTeX writing.
